@@ -5,6 +5,8 @@ All notable changes to Remote Connection Manager are listed here. Each release o
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-23
+
 ### Added
 - Move entries and folders to another folder or the top level:
   - Drag them in the navigation tree. Dropping on a folder moves into it; dropping on an entry moves into that entry's folder; dropping on empty space moves to the top level. Closed folders open if you hover on them, and the tree scrolls near its edges. Moving a folder asks first.
@@ -103,7 +105,8 @@ The first release.
   - Installs for the current user or for all users.
   - Needs the .NET 10 Desktop Runtime (x64).
 
-[Unreleased]: https://github.com/jamtheradar/RemoteConnectionManager/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/jamtheradar/RemoteConnectionManager/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/jamtheradar/RemoteConnectionManager/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/jamtheradar/RemoteConnectionManager/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jamtheradar/RemoteConnectionManager/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/jamtheradar/RemoteConnectionManager/releases/tag/v0.1.0
