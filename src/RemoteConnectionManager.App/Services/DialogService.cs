@@ -78,10 +78,34 @@ public sealed class DialogService : IDialogService
         return dialog.ShowDialog(Owner) == true ? dialog.FileName : null;
     }
 
+    public IReadOnlyList<string>? PickOpenFiles(string title)
+    {
+        var dialog = new OpenFileDialog { Title = title, Filter = "All files (*.*)|*.*", CheckFileExists = true, Multiselect = true };
+        return dialog.ShowDialog(Owner) == true ? dialog.FileNames : null;
+    }
+
+    public string? PickFolder(string title)
+    {
+        var dialog = new OpenFolderDialog { Title = title };
+        return dialog.ShowDialog(Owner) == true ? dialog.FolderName : null;
+    }
+
+    public string? Prompt(string title, string message, string initial, Func<string, string?>? validate = null, string okLabel = "OK")
+    {
+        var window = new PromptWindow(title, message, initial, validate, okLabel) { Owner = Owner };
+        return window.ShowDialog() == true ? window.Value : null;
+    }
+
     public bool EditVaultItem(VaultItemEditorViewModel editor)
     {
         var window = new VaultItemEditorWindow { DataContext = editor, Owner = Owner };
         return window.ShowDialog() == true;
+    }
+
+    public MoveTarget? PickMoveTarget(string itemName, IReadOnlyList<MoveTarget> targets)
+    {
+        var window = new MoveToWindow(itemName, targets) { Owner = Owner };
+        return window.ShowDialog() == true ? window.Result : null;
     }
 
     public bool Confirm(string message, string title) =>

@@ -4,7 +4,7 @@ namespace RemoteConnectionManager.Core.Models;
 
 /// <summary>
 /// Base for every leaf in the navigation tree. The JSON "type" discriminator picks the
-/// concrete class: "rdp", "terminal", "keyvault", "ssh" or "web". Never stores a password.
+/// concrete class: "rdp", "terminal", "keyvault", "ssh", "web", "webapp" or "storage". Never stores a password.
 /// </summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(RdpConnection), "rdp")]
@@ -12,6 +12,8 @@ namespace RemoteConnectionManager.Core.Models;
 [JsonDerivedType(typeof(KeyVaultConnection), "keyvault")]
 [JsonDerivedType(typeof(SshConnection), "ssh")]
 [JsonDerivedType(typeof(WebConnection), "web")]
+[JsonDerivedType(typeof(WebAppConnection), "webapp")]
+[JsonDerivedType(typeof(StorageAccountConnection), "storage")]
 public abstract class ConnectionEntry
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -50,4 +52,8 @@ public enum ConnectionKind
     /// <summary>SSH or telnet.</summary>
     Ssh,
     Web,
+    /// <summary>Azure Web App or Function App.</summary>
+    WebApp,
+    /// <summary>Azure Storage account (blob containers).</summary>
+    StorageAccount,
 }

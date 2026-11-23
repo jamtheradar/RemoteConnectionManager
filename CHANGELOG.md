@@ -5,6 +5,30 @@ All notable changes to Remote Connection Manager are listed here. Each release o
 
 ## [Unreleased]
 
+### Added
+- Move entries and folders to another folder or the top level:
+  - Drag them in the navigation tree. Dropping on a folder moves into it; dropping on an entry moves into that entry's folder; dropping on empty space moves to the top level. Closed folders open if you hover on them, and the tree scrolls near its edges. Moving a folder asks first.
+  - Or right click > Move to... (Ctrl+M in the tree) and pick a folder from a list you can filter. Places you cannot move to are greyed with the reason.
+  - In the shared database, moving an entry needs Edit on both folders, and moving a folder needs Manage on it and Edit on where it goes. A moved folder keeps its own permissions but now inherits from its new parent, so the tree reloads afterwards.
+- Azure Web App entries (APP) for Web Apps and Function Apps. Opening one shows a tab like the portal's Overview page:
+  - Status, default domain, App Service plan and tier, runtime stack, OS, region, HTTPS only, TLS, managed identity, outbound IPs and more.
+  - Browse, Start, Stop and Restart (Stop and Restart ask first), Open in portal and Copy resource ID.
+  - A slot picker for deployment slots. Everything in the tab applies to the slot shown.
+  - Environment variables (app settings) and connection strings, with values hidden until you show them. You can add, edit and remove them, and set the deployment slot setting tick. Copy uses the self-clearing clipboard. Key Vault references are flagged and open the vault.
+  - Save lists the changes by name, warns that it restarts the app, and checks that nobody changed the settings in Azure since you loaded them.
+- Azure Storage account entries (STG) with a blob browser, in the spirit of Azure Storage Explorer:
+  - Containers on the left; create one, or delete one by typing its name.
+  - A folder style listing with a breadcrumb, Up (Backspace), a name filter and Load more for very large folders.
+  - Properties and metadata of the selected blob.
+  - Upload files or whole folders, from buttons or by dragging them from Explorer. If files already exist you choose to replace or skip them.
+  - Download files or folders (folders keep their tree). Blob names Windows cannot use are cleaned, and names that would land outside the chosen folder are skipped.
+  - New folder, Rename (F2) and Delete (Delete key, asks first and says whether soft delete can get the blob back).
+  - Accounts with a hierarchical namespace (Data Lake Gen2) get real folders and one-step rename and delete. Elsewhere a rename copies on the server and then deletes the original, and a folder rename only deletes the originals if every copy worked.
+  - Transfers run in a panel at the bottom with progress and Cancel, so you can keep browsing.
+  - An Overview with replication, namespace, endpoints, soft delete, versioning, firewall and key access settings.
+  - Signs in with Entra ID only, never account keys or SAS. Your account needs a Storage Blob Data role (Reader to browse and download, Contributor to change things); refusals say so.
+- The Azure browser (Ctrl+Shift+K) now lists Web Apps and storage accounts next to Key Vaults, so you can open them or pin them to the tree.
+
 ## [0.3.0] - 2026-11-11
 
 ### Added

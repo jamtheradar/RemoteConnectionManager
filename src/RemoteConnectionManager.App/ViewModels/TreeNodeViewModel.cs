@@ -12,6 +12,8 @@ public sealed partial class TreeNodeViewModel : ObservableObject
     [ObservableProperty] private bool _isSelected;
     [ObservableProperty] private bool _isVisible = true;
     [ObservableProperty] private int _openSessions;
+    /// <summary>True while an item dragged in the tree would be dropped into this folder.</summary>
+    [ObservableProperty] private bool _isDropTarget;
 
     public ConnectionFolder? Folder { get; }
     public ConnectionEntry? Entry { get; }
@@ -35,6 +37,8 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             ConnectionKind.KeyVault => "",
             ConnectionKind.Ssh => "",
             ConnectionKind.Web => "",
+            ConnectionKind.WebApp => char.ConvertFromUtf32(0xE753),
+            ConnectionKind.StorageAccount => char.ConvertFromUtf32(0xE7B8),
             _ => "",
         };
 
@@ -60,6 +64,8 @@ public sealed partial class TreeNodeViewModel : ObservableObject
             ConnectionKind.KeyVault => "Icon.Vault",
             ConnectionKind.Ssh => "Icon.NetworkDevice",
             ConnectionKind.Web => "Icon.Website",
+            ConnectionKind.WebApp => "Icon.WebApp",
+            ConnectionKind.StorageAccount => "Icon.Storage",
             _ => "Icon.Default",
         };
 

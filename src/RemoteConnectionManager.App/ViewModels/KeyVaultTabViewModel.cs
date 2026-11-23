@@ -51,8 +51,10 @@ public sealed partial class KeyVaultTabViewModel : TabViewModelBase, IDisposable
     private readonly AppLog _log;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Dictionary<VaultItemKind, IReadOnlyList<VaultItem>> _cache = new();
+    private readonly Dictionary<VaultItemKind, DateTimeOffset> _loadedAt = new();
     private readonly DispatcherTimer _hideTimer;
     private CancellationTokenSource? _detailCts;
+    private CancellationTokenSource? _runCts;
     private VaultClient? _client;
     private object? _clientCredential;
     private CertificateDetails? _certificateDetails;
@@ -63,6 +65,7 @@ public sealed partial class KeyVaultTabViewModel : TabViewModelBase, IDisposable
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string _busyText = string.Empty;
     [ObservableProperty] private string _errorText = string.Empty;
+    [ObservableProperty] private bool _errorNeedsSignIn;
     [ObservableProperty] private string _statusMessage = string.Empty;
     [ObservableProperty] private string _countsText = string.Empty;
     [ObservableProperty] private VaultItemRowViewModel? _selectedRow;
@@ -91,6 +94,12 @@ public sealed partial class KeyVaultTabViewModel : TabViewModelBase, IDisposable
     public bool IsCertificateSelected => SelectedRow?.Item.Kind == VaultItemKind.Certificate;
     public bool IsValueShown => SecretValue is not null;
     public bool HasError => ErrorText.Length > 0;
+    public bool ShowBusyOverlay => IsBusy && Rows.Count == 0;
+    public bool NeedsSignIn => _auth.NeedsSignIn || !_auth.IsSignedIn;
+    public string AccountText => _auth.AccountName is not { } name ? "Not signed in to Azure"
+        : _auth.IsPrompting ? $"{name}: waiting for sign in"
+        : _auth.NeedsSignIn ? $"{name}: sign in expired"
+        : name;
     public string NewLabel => SelectedKind.Kind switch
     {
         VaultItemKind.Secret => "New secret",
@@ -123,7 +132,22 @@ public sealed partial class KeyVaultTabViewModel : TabViewModelBase, IDisposable
         _hideTimer.Tick += (_, _) => HideValue();
 
         _selectedKind = Kinds[0];
+        _auth.Changed += OnAuthChanged;
         _ = LoadKindAsync(force: false);
+    }
+
+    private void OnAuthChanged(object? sender, EventArgs e)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.BeginInvoke(() => OnAuthChanged(sender, e));
+            return;
+        }
+        OnPropertyChanged(nameof(AccountText));
+        OnPropertyChanged(nameof(NeedsSignIn));
+        if (IsBusy && _auth.IsPrompting)
+            BusyText = "Waiting for you to sign in to Azure. Look for the Microsoft sign in window, it may be behind this one...";
     }
 
     // ---------- loading ----------
@@ -141,11 +165,33 @@ public sealed partial class KeyVaultTabViewModel : TabViewModelBase, IDisposable
     partial void OnFilterTextChanged(string value) => ApplyFilter();
     partial void OnExpiringOnlyChanged(bool value) => ApplyFilter();
     partial void OnErrorTextChanged(string value) => OnPropertyChanged(nameof(HasError));
-    partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(EmptyText));
+    partial void OnIsBusyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(EmptyText));
+        OnPropertyChanged(nameof(ShowBusyOverlay));
+    }
     partial void OnSecretValueChanged(string? value) => OnPropertyChanged(nameof(IsValueShown));
 
     [RelayCommand]
-    private Task Refresh() => LoadKindAsync(force: true);
+    private async Task Refresh()
+    {
+        if (IsBusy) return;
+        await LoadKindAsync(force: true);
+        if (!HasError && _loadedAt.TryGetValue(SelectedKind.Kind, out var at))
+            StatusMessage = $"Refreshed {SelectedKind.Title.ToLowerInvariant()} at {at:HH:mm:ss}.";
+    }
+
+    /// <summary>Signs in again (showing the broker if needed), then reloads the current list.</summary>
+    [RelayCommand]
+    private async Task SignIn()
+    {
+        if (IsBusy) return;
+        await RunAsync("Signing in to Azure", "Signing in", (_, _) => Task.CompletedTask);
+        if (!HasError) await LoadKindAsync(force: true);
+    }
+
+    [RelayCommand]
+    private void Cancel() => _runCts?.Cancel();
 
     private async Task LoadKindAsync(bool force)
     {
@@ -156,6 +202,7 @@ public sealed partial class KeyVaultTabViewModel : TabViewModelBase, IDisposable
             await RunAsync($"Loading {SelectedKind.Title.ToLowerInvariant()}", $"List {SelectedKind.Title.ToLowerInvariant()}", async (client, ct) =>
             {
                 _cache[kind] = await client.ListAsync(kind, ct);
+                _loadedAt[kind] = DateTimeOffset.Now;
             });
             if (kind != SelectedKind.Kind) return;
             ApplyFilter();
@@ -183,8 +230,10 @@ public sealed partial class KeyVaultTabViewModel : TabViewModelBase, IDisposable
         var noun = SelectedKind.Title.ToLowerInvariant();
         CountsText = _cache.ContainsKey(SelectedKind.Kind)
             ? $"{all.Count} {noun}" + (attention > 0 ? $", {attention} expired or expiring within {ExpiryRules.SoonDays} days" : string.Empty)
+              + (_loadedAt.TryGetValue(SelectedKind.Kind, out var at) ? $"  ·  loaded {at:HH:mm:ss}" : string.Empty)
             : string.Empty;
         OnPropertyChanged(nameof(EmptyText));
+        OnPropertyChanged(nameof(ShowBusyOverlay));
     }
 
     private static bool Matches(VaultItem item, string filter) =>
@@ -485,7 +534,11 @@ public sealed partial class KeyVaultTabViewModel : TabViewModelBase, IDisposable
     }
 
     [RelayCommand]
-    private void DismissError() => ErrorText = string.Empty;
+    private void DismissError()
+    {
+        ErrorText = string.Empty;
+        ErrorNeedsSignIn = false;
+    }
 
     private async Task AfterWriteAsync(string? select, string message)
     {
@@ -513,25 +566,49 @@ public sealed partial class KeyVaultTabViewModel : TabViewModelBase, IDisposable
     private async Task RunAsync(string busy, string action, Func<VaultClient, CancellationToken, Task> work)
     {
         ErrorText = string.Empty;
+        ErrorNeedsSignIn = false;
         StatusMessage = string.Empty;
-        BusyText = busy + "...";
+        BusyText = "Checking Azure sign in...";
         IsBusy = true;
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _runCts = cts;
         try
         {
-            var ct = _lifetime.Token;
+            var ct = cts.Token;
             await _auth.EnsureSignedInAsync(_tenantId, AzureAuth.VaultScope, ct);
-            await work(Client(), ct);
+            BusyText = busy + "...";
+            try
+            {
+                await work(Client(), ct);
+            }
+            catch (Exception ex) when (AzureAuth.IsInteractionRequired(ex) || ex is Azure.RequestFailedException { Status: 401 })
+            {
+                // The token ran out between the check and the call. Sign in again and retry once.
+                _log.Info($"[{VaultName}] token refused during '{action}', signing in again");
+                BusyText = "Your Azure sign in expired, signing in again...";
+                await _auth.EnsureSignedInAsync(_tenantId, AzureAuth.VaultScope, ct);
+                BusyText = busy + "...";
+                await work(Client(), ct);
+            }
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
         }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            ErrorText = $"{action} was cancelled.";
+            ErrorNeedsSignIn = _auth.NeedsSignIn || !_auth.IsSignedIn;
+        }
         catch (Exception ex)
         {
             ErrorText = KeyVaultErrors.Describe(ex, action);
+            ErrorNeedsSignIn = AzureAuth.IsInteractionRequired(ex) || ex is Azure.RequestFailedException { Status: 401 }
+                || ex is Azure.Identity.AuthenticationFailedException || _auth.NeedsSignIn;
             _log.Warn($"[{VaultName}] {action} failed: {ex.GetType().Name}: {ex.Message.Split('\n')[0]}");
         }
         finally
         {
+            if (ReferenceEquals(_runCts, cts)) _runCts = null;
             IsBusy = false;
             BusyText = string.Empty;
         }
@@ -551,6 +628,7 @@ public sealed partial class KeyVaultTabViewModel : TabViewModelBase, IDisposable
 
     public void Dispose()
     {
+        _auth.Changed -= OnAuthChanged;
         _hideTimer.Stop();
         SecretValue = null;
         _detailCts?.Cancel();

@@ -69,7 +69,7 @@ public static class ServiceFilter
                 if (taken.Add(s.Name)) rows.Add(new ServiceRow(s, ServiceListReason.Watched));
 
         var stoppedAuto = all.Where(s => s.IsAutomatic && !s.IsRunning).OrderBy(s => s.DisplayName, StringComparer.OrdinalIgnoreCase).ToList();
-        foreach (var s in stoppedAuto.Where(s => !onDemand.Any(p => Matches(p, s))))
+        foreach (var s in stoppedAuto.Where(s => !IsOnDemand(s, onDemand)))
             if (taken.Add(s.Name)) rows.Add(new ServiceRow(s, ServiceListReason.AutomaticNotRunning));
 
         if (showAll)
@@ -85,7 +85,19 @@ public static class ServiceFilter
 
     /// <summary>How many stopped automatic services were left out because they start on demand.</summary>
     public static int CountOnDemandHidden(IEnumerable<ServiceInfo> services, IReadOnlyList<string> watchList) =>
-        services.Count(s => s.IsAutomatic && !s.IsRunning && KnownOnDemand.Any(p => Matches(p, s)) && !watchList.Any(p => Matches(p, s)));
+        services.Count(s => s.IsAutomatic && !s.IsRunning && IsOnDemand(s, KnownOnDemand) && !watchList.Any(p => Matches(p, s)));
+
+    /// <summary>
+    /// Per-user service instances: Windows copies a template such as cbdhsvc or OneSyncSvc for each
+    /// signed in session and adds the session's LUID in hex ("cbdhsvc_102b424"). They are Automatic
+    /// but stop when that session ends, so a stopped one is normal.
+    /// </summary>
+    private static readonly Regex PerUserInstance = new("_[0-9a-f]{5,8}$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    public static bool IsPerUserInstance(ServiceInfo service) => PerUserInstance.IsMatch(service.Name);
+
+    private static bool IsOnDemand(ServiceInfo service, IReadOnlyList<string> onDemand) =>
+        IsPerUserInstance(service) || onDemand.Any(p => Matches(p, service));
 
     /// <summary>Watch list patterns that matched nothing, so the user can spot a typo or a missing role.</summary>
     public static IReadOnlyList<string> Unmatched(IEnumerable<ServiceInfo> services, IReadOnlyList<string> watchList)

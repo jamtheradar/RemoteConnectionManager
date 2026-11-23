@@ -14,6 +14,7 @@ public partial class ShellWindow : Window
         _vm = vm;
         DataContext = vm;
         InitializeComponent();
+        _expandTimer.Tick += ExpandTimer_Tick;
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -24,6 +25,11 @@ public partial class ShellWindow : Window
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
+        if (!_vm.ConfirmClose())
+        {
+            e.Cancel = true;
+            return;
+        }
         // Bring detached sessions home while this window can still host them.
         _vm.DockAllSessions();
         base.OnClosing(e);
@@ -59,12 +65,7 @@ public partial class ShellWindow : Window
     // selected before (or nothing). Select the item under the mouse first, like Explorer does.
     private void Tree_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
-        var d = e.OriginalSource as DependencyObject;
-        while (d is not null and not TreeViewItem)
-            d = d is System.Windows.Media.Visual or System.Windows.Media.Media3D.Visual3D
-                ? System.Windows.Media.VisualTreeHelper.GetParent(d)
-                : LogicalTreeHelper.GetParent(d);
-        if (d is TreeViewItem item)
+        if (e.OriginalSource is DependencyObject source && ItemAt(source) is { } item)
         {
             item.IsSelected = true;
             item.Focus();
@@ -96,7 +97,151 @@ public partial class ShellWindow : Window
                 _vm.EditCommand.Execute(null);
                 e.Handled = true;
                 break;
+            case Key.M when Keyboard.Modifiers == ModifierKeys.Control && _vm.MoveToCommand.CanExecute(null):
+                _vm.MoveToCommand.Execute(null);
+                e.Handled = true;
+                break;
         }
+    }
+
+    // ----- drag and drop: move entries and folders between folders -----
+
+    private System.Windows.Point _dragStart;
+    private TreeNodeViewModel? _dragNode;
+    private TreeNodeViewModel? _dropHighlight;
+    private TreeNodeViewModel? _hoverFolder;
+    private readonly System.Windows.Threading.DispatcherTimer _expandTimer = new() { Interval = TimeSpan.FromMilliseconds(700) };
+    private const string DragFormat = "RemoteConnectionManager.TreeNode";
+
+    private void Tree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        // Only a press on an item's name starts a drag; the expander and scroll bar keep working as usual.
+        _dragNode = e.OriginalSource is DependencyObject source && IsInsideHeader(source) ? ItemAt(source)?.DataContext as TreeNodeViewModel : null;
+        _dragStart = e.GetPosition(Tree);
+    }
+
+    private void Tree_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_dragNode is not { } node || e.LeftButton != MouseButtonState.Pressed) return;
+        var delta = e.GetPosition(Tree) - _dragStart;
+        if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+        _dragNode = null;
+        if (!_vm.CanStartMove(node)) return;
+        try
+        {
+            DragDrop.DoDragDrop(Tree, new DataObject(DragFormat, node), DragDropEffects.Move);
+        }
+        finally
+        {
+            EndDragFeedback();
+        }
+    }
+
+    private void Tree_DragOver(object sender, DragEventArgs e)
+    {
+        e.Handled = true;
+        AutoScroll(e);
+        if (e.Data.GetData(DragFormat) is not TreeNodeViewModel node)
+        {
+            e.Effects = DragDropEffects.None;
+            return;
+        }
+        var (target, highlight, hoverFolder) = DropTargetAt(e.OriginalSource as DependencyObject);
+        var allowed = _vm.CanMove(node, target);
+        e.Effects = allowed ? DragDropEffects.Move : DragDropEffects.None;
+        SetDropHighlight(allowed ? highlight : null);
+
+        // Hovering on a closed folder opens it after a moment, so deep folders can be reached.
+        if (!ReferenceEquals(hoverFolder, _hoverFolder))
+        {
+            _hoverFolder = hoverFolder;
+            _expandTimer.Stop();
+            if (hoverFolder is { IsExpanded: false, Children.Count: > 0 }) _expandTimer.Start();
+        }
+    }
+
+    private void Tree_DragLeave(object sender, DragEventArgs e)
+    {
+        // DragLeave also fires moving between items; only clear when the pointer really left the tree.
+        var p = e.GetPosition(Tree);
+        if (p.X < 0 || p.Y < 0 || p.X >= Tree.ActualWidth || p.Y >= Tree.ActualHeight) EndDragFeedback();
+    }
+
+    private void Tree_Drop(object sender, DragEventArgs e)
+    {
+        e.Handled = true;
+        var node = e.Data.GetData(DragFormat) as TreeNodeViewModel;
+        var (target, _, _) = DropTargetAt(e.OriginalSource as DependencyObject);
+        EndDragFeedback();
+        if (node is null || !_vm.CanMove(node, target)) return;
+        // Folders carry everything inside them (and, in the shared database, their permissions change), so ask first.
+        if (node.Folder is { } folder &&
+            !_vm.ConfirmMove($"Move folder '{folder.Name}' and everything in it to {(target is null ? "the top level" : $"'{target.Name}'")}?"))
+            return;
+        _vm.Move(node, target);
+    }
+
+    /// <summary>
+    /// Where a drop lands: on a folder, into it; on an entry, into the entry's folder; on empty space, the top level.
+    /// Also returns the folder node to highlight and the folder under the pointer (for opening on hover).
+    /// </summary>
+    private (Core.Models.ConnectionFolder? Target, TreeNodeViewModel? Highlight, TreeNodeViewModel? HoverFolder) DropTargetAt(DependencyObject? source)
+    {
+        if (source is null || ItemAt(source)?.DataContext is not TreeNodeViewModel over) return (null, null, null);
+        if (over.IsFolder) return (over.Folder, over, over);
+        return (over.Parent?.Folder, over.Parent, null);
+    }
+
+    private void SetDropHighlight(TreeNodeViewModel? node)
+    {
+        if (ReferenceEquals(node, _dropHighlight)) return;
+        if (_dropHighlight is not null) _dropHighlight.IsDropTarget = false;
+        _dropHighlight = node;
+        if (node is not null) node.IsDropTarget = true;
+    }
+
+    private void EndDragFeedback()
+    {
+        SetDropHighlight(null);
+        _expandTimer.Stop();
+        _hoverFolder = null;
+    }
+
+    private void ExpandTimer_Tick(object? sender, EventArgs e)
+    {
+        _expandTimer.Stop();
+        if (_hoverFolder is not null) _hoverFolder.IsExpanded = true;
+    }
+
+    /// <summary>Scrolls the tree while dragging near its top or bottom edge.</summary>
+    private void AutoScroll(DragEventArgs e)
+    {
+        if (FindChild<ScrollViewer>(Tree) is not { } scroll) return;
+        const double edge = 24;
+        var y = e.GetPosition(scroll).Y;
+        if (y < edge) scroll.LineUp();
+        else if (y > scroll.ActualHeight - edge) scroll.LineDown();
+    }
+
+    private static TreeViewItem? ItemAt(DependencyObject source)
+    {
+        var d = source;
+        while (d is not null and not TreeViewItem)
+            d = d is System.Windows.Media.Visual or System.Windows.Media.Media3D.Visual3D
+                ? System.Windows.Media.VisualTreeHelper.GetParent(d)
+                : LogicalTreeHelper.GetParent(d);
+        return d as TreeViewItem;
+    }
+
+    private static T? FindChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (var i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+            if (child is T found) return found;
+            if (FindChild<T>(child) is { } deeper) return deeper;
+        }
+        return null;
     }
 
     /// <summary>Double clicks on the expander or empty tree space should not connect.</summary>

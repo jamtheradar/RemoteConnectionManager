@@ -26,6 +26,8 @@
     <SolidColorBrush x:Key="Icon.NetworkDevice"  Color="#2dd4bf" />
     <SolidColorBrush x:Key="Icon.Website"        Color="#c084fc" />
     <SolidColorBrush x:Key="Icon.Vault"          Color="#f0a030" />
+    <SolidColorBrush x:Key="Icon.WebApp"         Color="#36b3e8" />
+    <SolidColorBrush x:Key="Icon.Storage"        Color="#5b8def" />
     <SolidColorBrush x:Key="Icon.Azure"          Color="#36b3e8" />
     <SolidColorBrush x:Key="Icon.Subscription"   Color="#f2c94c" />
     <SolidColorBrush x:Key="Icon.ResourceGroup"  Color="#a78bfa" />
@@ -516,7 +518,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="TreeViewItem">
                     <StackPanel>
-                        <Border x:Name="Bd" Background="Transparent" Padding="2,3" CornerRadius="3">
+                        <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" Padding="1,2" CornerRadius="3">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="16" />
@@ -549,6 +551,11 @@
                             </MultiTrigger.Conditions>
                             <Setter TargetName="Bd" Property="Background" Value="{StaticResource Surface.SelectedInactive}" />
                         </MultiTrigger>
+                        <!-- A folder that a dragged item would be moved into (TreeNodeViewModel.IsDropTarget) -->
+                        <DataTrigger Binding="{Binding IsDropTarget}" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Chrome.Accent}" />
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource Surface.Hover}" />
+                        </DataTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>

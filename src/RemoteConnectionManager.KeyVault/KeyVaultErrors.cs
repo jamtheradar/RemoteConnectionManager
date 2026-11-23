@@ -12,8 +12,8 @@ public static class KeyVaultErrors
         {
             case OperationCanceledException:
                 return $"{action} was cancelled.";
-            case AuthenticationRequiredException:
-                return "Sign in to Azure first.";
+            case Exception when AzureAuth.IsInteractionRequired(ex):
+                return "Your Azure sign in has expired or was not completed. Sign in again to continue.";
             case CredentialUnavailableException cu:
                 return $"Azure sign in is not available: {FirstLine(cu.Message)}";
             case AuthenticationFailedException af:

@@ -14,6 +14,8 @@ public sealed class AzureAuth
 {
     public const string ArmScope = "https://management.azure.com/.default";
     public const string VaultScope = "https://vault.azure.net/.default";
+    /// <summary>Blob and Data Lake data (Storage Blob Data roles).</summary>
+    public const string StorageScope = "https://storage.azure.com/.default";
 
     private readonly Func<IntPtr> _windowHandle;
     private readonly string _recordPath;
@@ -33,8 +35,22 @@ public sealed class AzureAuth
     public string? AccountName => _record?.Username;
     public string? HomeTenantId => _record?.TenantId;
 
-    /// <summary>Raised on sign in and sign out.</summary>
+    /// <summary>
+    /// True when an account is saved but the last silent token request was refused (the token has
+    /// expired, was revoked, or needs MFA again). The next <see cref="EnsureSignedInAsync"/> prompts.
+    /// </summary>
+    public bool NeedsSignIn { get; private set; }
+
+    /// <summary>True while the broker's sign in window is open and waiting for the user.</summary>
+    public bool IsPrompting { get; private set; }
+
+    /// <summary>Raised on sign in and sign out, and when <see cref="NeedsSignIn"/> or <see cref="IsPrompting"/> change.</summary>
     public event EventHandler? Changed;
+
+    /// <summary>True when the exception means a prompt is needed rather than a real failure.</summary>
+    public static bool IsInteractionRequired(Exception ex) =>
+        ex is AuthenticationRequiredException ||
+        (ex is AuthenticationFailedException && ex.InnerException?.GetType().Name == "MsalUiRequiredException");
 
     /// <summary>Reads the saved record, if any. Does not contact Azure.</summary>
     public async Task LoadAsync(CancellationToken ct = default)
@@ -84,24 +100,43 @@ public sealed class AzureAuth
             try
             {
                 await credential.GetTokenAsync(context, ct).ConfigureAwait(true);
+                SetNeedsSignIn(false);
                 return;
             }
-            catch (AuthenticationRequiredException)
+            catch (Exception ex) when (IsInteractionRequired(ex))
             {
-                // fall through to the broker
+                // Expired or revoked: fall through to the broker.
+                SetNeedsSignIn(true);
             }
         }
 
         await _signInGate.WaitAsync(ct).ConfigureAwait(true);
         try
         {
+            SetPrompting(true);
             var record = await credential.AuthenticateAsync(context, ct).ConfigureAwait(true);
+            NeedsSignIn = false;
             await SaveRecordAsync(record, ct).ConfigureAwait(true);
         }
         finally
         {
+            SetPrompting(false);
             _signInGate.Release();
         }
+    }
+
+    private void SetNeedsSignIn(bool value)
+    {
+        if (NeedsSignIn == value) return;
+        NeedsSignIn = value;
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void SetPrompting(bool value)
+    {
+        if (IsPrompting == value) return;
+        IsPrompting = value;
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Signs in with the broker's account picker instead of the Windows default account.</summary>
@@ -110,13 +145,16 @@ public sealed class AzureAuth
         await _signInGate.WaitAsync(ct).ConfigureAwait(true);
         try
         {
+            SetPrompting(true);
             var credential = Create(null, useDefaultAccount: false);
             var record = await credential.AuthenticateAsync(new TokenRequestContext([ArmScope]), ct).ConfigureAwait(true);
             lock (_credentials) _credentials.Clear();
+            NeedsSignIn = false;
             await SaveRecordAsync(record, ct).ConfigureAwait(true);
         }
         finally
         {
+            SetPrompting(false);
             _signInGate.Release();
         }
     }
@@ -125,6 +163,7 @@ public sealed class AzureAuth
     public void SignOut()
     {
         _record = null;
+        NeedsSignIn = false;
         lock (_credentials) _credentials.Clear();
         try { File.Delete(_recordPath); } catch { }
         Changed?.Invoke(this, EventArgs.Empty);

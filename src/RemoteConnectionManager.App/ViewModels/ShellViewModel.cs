@@ -4,6 +4,8 @@ using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RemoteConnectionManager.App.Services;
+using RemoteConnectionManager.AppService;
+using RemoteConnectionManager.Storage;
 using RemoteConnectionManager.Core.Import;
 using RemoteConnectionManager.Core.Models;
 using RemoteConnectionManager.Core.Services;
@@ -27,12 +29,16 @@ public sealed partial class ShellViewModel : ObservableObject
     private IReadOnlyDictionary<Guid, PersonalEntrySettings> _personal = new Dictionary<Guid, PersonalEntrySettings>();
     /// <summary>True after a failed load, so an empty document is never saved over a database that could not be read.</summary>
     private bool _loadFailed;
+    /// <summary>A change was made but the database could not be reached; it is saved when the store comes back.</summary>
+    private bool _unsavedWhileOffline;
     private readonly AppSettingsStore _settingsStore;
     private readonly AppSettings _settings;
     private readonly IDialogService _dialogs;
     private readonly AppLog _log;
     private readonly AzureAuth _azure;
     private readonly VaultCatalog _vaultCatalog;
+    private readonly WebAppCatalog _webAppCatalog;
+    private readonly StorageCatalog _storageCatalog;
     private readonly ClipboardGuard _clipboard;
     private readonly RdpCredentialService _credentials;
     private readonly ISessionWindows _sessionWindows;
@@ -69,7 +75,7 @@ public sealed partial class ShellViewModel : ObservableObject
     public string VersionText => $"v{typeof(ShellViewModel).Assembly.GetName().Version?.ToString(3)} x64";
 
     public ShellViewModel(StorageBackend backend, AppSettingsStore settingsStore, AppSettings settings, IDialogService dialogs, AppLog log,
-        AzureAuth azure, VaultCatalog vaultCatalog, ClipboardGuard clipboard, RdpCredentialService credentials, ISessionWindows sessionWindows,
+        AzureAuth azure, VaultCatalog vaultCatalog, WebAppCatalog webAppCatalog, StorageCatalog storageCatalog, ClipboardGuard clipboard, RdpCredentialService credentials, ISessionWindows sessionWindows,
         PluginRegistry plugins, SessionLogService sessionLogs)
     {
         _plugins = plugins;
@@ -83,6 +89,8 @@ public sealed partial class ShellViewModel : ObservableObject
         _log = log;
         _azure = azure;
         _vaultCatalog = vaultCatalog;
+        _webAppCatalog = webAppCatalog;
+        _storageCatalog = storageCatalog;
         _clipboard = clipboard;
 
         _azure.Changed += (_, _) => Application.Current?.Dispatcher.BeginInvoke(UpdateAzureAccount);
@@ -139,6 +147,8 @@ public sealed partial class ShellViewModel : ObservableObject
             StatusText = _store.IsReadOnly
                 ? $"{ConnectionsFileName} is read only since {DateTime.Now:HH:mm:ss}"
                 : $"{ConnectionsFileName} is back online at {DateTime.Now:HH:mm:ss}";
+            // Back online with a change kept from while it was gone: save it now. Row versions catch anything changed meanwhile.
+            if (_unsavedWhileOffline && !_store.IsReadOnly) SaveDocument(SelectedNode?.Entry?.Id ?? SelectedNode?.Folder?.Id);
         });
     }
 
@@ -147,6 +157,7 @@ public sealed partial class ShellViewModel : ObservableObject
     private void LoadDocument()
     {
         _loadFailed = false;
+        _unsavedWhileOffline = false;
         ChangesNotice = null;
         try
         {
@@ -256,18 +267,37 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private IEnumerable<TreeNodeViewModel> AllNodes() => RootNodes.SelectMany(r => r.Descendants().Prepend(r));
 
-    private void SaveDocument(Guid? reselect = null)
+    /// <summary>Saves and rebuilds the tree. False when the change did not reach the store (yet).</summary>
+    private bool SaveDocument(Guid? reselect = null)
     {
         if (_loadFailed && _store.Kind == StorageKind.SqlServer)
         {
             _dialogs.Error("The connections could not be loaded, so nothing was saved. Press Reload once the database is reachable.", "Connections");
             LoadDocument();
-            return;
+            return false;
         }
         try
         {
             _store.Save(Document);
-            StatusText = $"Saved to {ConnectionsFileName} at {DateTime.Now:HH:mm:ss}";
+            StatusText = _unsavedWhileOffline
+                ? $"Saved the changes made while offline to {ConnectionsFileName} at {DateTime.Now:HH:mm:ss}"
+                : $"Saved to {ConnectionsFileName} at {DateTime.Now:HH:mm:ss}";
+            _unsavedWhileOffline = false;
+        }
+        catch (StoreUnavailableException ex)
+        {
+            // Nothing was saved, but the tree last loaded is still right: keep the change and save it when the database is back.
+            _log.Warn($"Save deferred, database unreachable: {ex.Message}");
+            var first = !_unsavedWhileOffline;
+            _unsavedWhileOffline = true;
+            StatusText = $"Not saved yet: {ConnectionsFileName} cannot be reached. Your changes are kept and will be saved when it is back.";
+            RebuildTree(reselect);
+            if (first)
+                _dialogs.Error(
+                    $"The database could not be reached, so your change has not been saved yet.\n\n{ex.Message}\n\n" +
+                    "The change is kept and RCM will save it when the database is back. Keep RCM open until then; closing or reloading now loses it.",
+                    "Not saved yet");
+            return false;
         }
         catch (Exception ex) when (ex is StoreConflictException or StorePermissionException)
         {
@@ -277,7 +307,7 @@ public sealed partial class ShellViewModel : ObservableObject
             _dialogs.Error($"{what}.\n\n{ex.Message}\n\nThe tree will reload with the current version.", "Not saved");
             LoadDocument();
             RebuildTree(reselect);
-            return;
+            return false;
         }
         catch (Exception ex)
         {
@@ -287,14 +317,15 @@ public sealed partial class ShellViewModel : ObservableObject
                 // Keep the in-memory change; the next successful save writes it.
                 _dialogs.Error($"Could not save {_store.Location}.\n\n{ex.Message}", "Connections file");
                 RebuildTree(reselect);
-                return;
+                return false;
             }
             _dialogs.Error($"Could not save to {_store.Location}.\n\n{ex.Message}\n\nThe tree will reload.", "Connections");
             LoadDocument();
             RebuildTree(reselect);
-            return;
+            return false;
         }
         RebuildTree(reselect);
+        return true;
     }
 
     private void OnExternalChange()
@@ -332,6 +363,8 @@ public sealed partial class ShellViewModel : ObservableObject
         NewSshCommand.NotifyCanExecuteChanged();
         NewTelnetCommand.NotifyCanExecuteChanged();
         NewWebsiteCommand.NotifyCanExecuteChanged();
+        NewWebAppCommand.NotifyCanExecuteChanged();
+        NewStorageCommand.NotifyCanExecuteChanged();
         OpenInBrowserCommand.NotifyCanExecuteChanged();
         OpenInTabCommand.NotifyCanExecuteChanged();
         ImportMRemoteNgCommand.NotifyCanExecuteChanged();
@@ -339,6 +372,7 @@ public sealed partial class ShellViewModel : ObservableObject
         ImportRoyalTsCommand.NotifyCanExecuteChanged();
         FolderPermissionsCommand.NotifyCanExecuteChanged();
         MyWatchedServicesCommand.NotifyCanExecuteChanged();
+        MoveToCommand.NotifyCanExecuteChanged();
         OpenAdminCommand.NotifyCanExecuteChanged();
     }
 
@@ -363,7 +397,7 @@ public sealed partial class ShellViewModel : ObservableObject
     {
         if (SelectedNode?.Entry is { } entry) OpenEntry(entry);
     }
-    private bool CanConnect() => SelectedNode?.Entry is RdpConnection or TerminalConnection or KeyVaultConnection or SshConnection or WebConnection;
+    private bool CanConnect() => SelectedNode?.Entry is RdpConnection or TerminalConnection or KeyVaultConnection or SshConnection or WebConnection or WebAppConnection or StorageAccountConnection;
 
     public void OpenEntry(ConnectionEntry entry)
     {
@@ -389,6 +423,22 @@ public sealed partial class ShellViewModel : ObservableObject
                     return;
                 }
                 OpenVault(uri, kv.TenantId, kv.Name, kv);
+                break;
+            case WebAppConnection app:
+                if (WebAppId.Parse(app.ResourceId) is not { } appId)
+                {
+                    _dialogs.Error($"'{app.Name}' has no valid Azure resource ID. Edit it and paste the app's resource ID or its Azure portal address.", "Open Web App");
+                    return;
+                }
+                OpenWebApp(appId, app.TenantId, app.Name, app);
+                break;
+            case StorageAccountConnection storage:
+                if (StorageAccountId.Parse(storage.ResourceId) is not { } accountId)
+                {
+                    _dialogs.Error($"'{storage.Name}' has no valid Azure resource ID. Edit it and paste the storage account's resource ID or its Azure portal address.", "Open storage account");
+                    return;
+                }
+                OpenStorage(accountId, storage.TenantId, storage.Name, storage.Container, storage);
                 break;
         }
     }
@@ -660,13 +710,112 @@ public sealed partial class ShellViewModel : ObservableObject
         StatusText = $"Pinned {vault.Name} to {(parent?.Name ?? "the top level")}";
     }
 
+    // ---------- Azure Web Apps ----------
+
+    /// <summary>Opens a Web App tab, or switches to the one already open for that app.</summary>
+    public void OpenWebApp(WebAppId id, string? tenantId, string title, WebAppConnection? entry)
+    {
+        var existing = Tabs.OfType<WebAppTabViewModel>().FirstOrDefault(t =>
+            string.Equals(t.BaseId.ToString(), id.Site.ToString(), StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
+        {
+            SelectedTab = existing;
+            return;
+        }
+        var tab = new WebAppTabViewModel(id, tenantId, title, entry, this, _azure, _clipboard, _dialogs, _log);
+        if (entry is not null) tab.SetIconColour(SettingsResolver.ResolveIconColour(entry, Document.ChainFor(entry)));
+        Tabs.Add(tab);
+        SelectedTab = tab;
+        UpdateOpenSessionCounts();
+        _log.Info($"Opened Web App tab for {id.DisplayName}");
+    }
+
+    /// <summary>Adds a Web App found in Azure to the connections tree, in the selected folder.</summary>
+    public void PinWebApp(WebAppInfo app)
+    {
+        var existing = Document.AllEntries().Select(e => e.Entry).OfType<WebAppConnection>()
+            .FirstOrDefault(w => string.Equals(WebAppId.Parse(w.ResourceId)?.ToString(), WebAppId.Parse(app.ResourceId)?.ToString(), StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
+        {
+            StatusText = $"{app.Name} is already in the tree as '{existing.Name}'";
+            RebuildTree(existing.Id);
+            return;
+        }
+        var entry = new WebAppConnection
+        {
+            Name = app.Name,
+            ResourceId = WebAppId.Parse(app.ResourceId)?.ToString() ?? app.ResourceId,
+            TenantId = string.Equals(app.TenantId, _azure.HomeTenantId, StringComparison.OrdinalIgnoreCase) ? null : app.TenantId,
+            Description = $"{app.SubscriptionName} / {app.ResourceGroup} ({app.Location})",
+        };
+        var parent = TargetFolderForNew();
+        if (!CanChange(parent))
+        {
+            _dialogs.Error($"You cannot add entries to {(parent is null ? "the top level" : $"'{parent.Name}'")}. Select a folder you can edit first.", "Pin Web App");
+            return;
+        }
+        if (parent is null) Document.Connections.Add(entry); else parent.Connections.Add(entry);
+        SaveDocument(entry.Id);
+        StatusText = $"Pinned {app.Name} to {(parent?.Name ?? "the top level")}";
+    }
+
+    // ---------- Azure Storage ----------
+
+    /// <summary>Opens a storage account tab, or switches to the one already open for that account.</summary>
+    public void OpenStorage(StorageAccountId id, string? tenantId, string title, string? container, StorageAccountConnection? entry)
+    {
+        var existing = Tabs.OfType<StorageTabViewModel>().FirstOrDefault(t =>
+            string.Equals(t.AccountId.ToString(), id.ToString(), StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
+        {
+            SelectedTab = existing;
+            return;
+        }
+        var tab = new StorageTabViewModel(id, tenantId, title, container, entry, this, _azure, _clipboard, _dialogs, _log);
+        if (entry is not null) tab.SetIconColour(SettingsResolver.ResolveIconColour(entry, Document.ChainFor(entry)));
+        Tabs.Add(tab);
+        SelectedTab = tab;
+        UpdateOpenSessionCounts();
+        _log.Info($"Opened storage tab for {id.AccountName}");
+    }
+
+    /// <summary>Adds a storage account found in Azure to the connections tree, in the selected folder.</summary>
+    public void PinStorage(StorageAccountInfo account)
+    {
+        var id = StorageAccountId.Parse(account.ResourceId)?.ToString() ?? account.ResourceId;
+        var existing = Document.AllEntries().Select(e => e.Entry).OfType<StorageAccountConnection>()
+            .FirstOrDefault(s => string.Equals(StorageAccountId.Parse(s.ResourceId)?.ToString(), id, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
+        {
+            StatusText = $"{account.Name} is already in the tree as '{existing.Name}'";
+            RebuildTree(existing.Id);
+            return;
+        }
+        var entry = new StorageAccountConnection
+        {
+            Name = account.Name,
+            ResourceId = id,
+            TenantId = string.Equals(account.TenantId, _azure.HomeTenantId, StringComparison.OrdinalIgnoreCase) ? null : account.TenantId,
+            Description = $"{account.SubscriptionName} / {account.ResourceGroup} ({account.Location})",
+        };
+        var parent = TargetFolderForNew();
+        if (!CanChange(parent))
+        {
+            _dialogs.Error($"You cannot add entries to {(parent is null ? "the top level" : $"'{parent.Name}'")}. Select a folder you can edit first.", "Pin storage account");
+            return;
+        }
+        if (parent is null) Document.Connections.Add(entry); else parent.Connections.Add(entry);
+        SaveDocument(entry.Id);
+        StatusText = $"Pinned {account.Name} to {(parent?.Name ?? "the top level")}";
+    }
+
     [RelayCommand]
     private void OpenAzureBrowser()
     {
         var tab = Tabs.OfType<AzureBrowserTabViewModel>().FirstOrDefault();
         if (tab is null)
         {
-            tab = new AzureBrowserTabViewModel(this, _azure, _vaultCatalog, _log);
+            tab = new AzureBrowserTabViewModel(this, _azure, _vaultCatalog, _webAppCatalog, _storageCatalog, _log);
             Tabs.Add(tab);
         }
         SelectedTab = tab;
@@ -674,7 +823,10 @@ public sealed partial class ShellViewModel : ObservableObject
 
     private void UpdateAzureAccount()
     {
-        AzureAccountText = _azure.AccountName is { } name ? $"Azure: {name}" : "Azure: not signed in";
+        AzureAccountText = _azure.AccountName is not { } name ? "Azure: not signed in"
+            : _azure.IsPrompting ? $"Azure: {name} (waiting for sign in)"
+            : _azure.NeedsSignIn ? $"Azure: {name} (sign in expired)"
+            : $"Azure: {name}";
         Dashboard.Refresh();
     }
 
@@ -723,6 +875,12 @@ public sealed partial class ShellViewModel : ObservableObject
 
     [RelayCommand(CanExecute = nameof(CanAddHere))]
     private void NewWebsite() => NewEntry(new WebConnection { Name = "New website" });
+
+    [RelayCommand(CanExecute = nameof(CanAddHere))]
+    private void NewWebApp() => NewEntry(new WebAppConnection { Name = "New Azure Web App" });
+
+    [RelayCommand(CanExecute = nameof(CanAddHere))]
+    private void NewStorage() => NewEntry(new StorageAccountConnection { Name = "New Azure Storage account" });
 
     private void NewEntry(ConnectionEntry entry)
     {
@@ -784,6 +942,86 @@ public sealed partial class ShellViewModel : ObservableObject
         }
     }
 
+    // ---------- moving ----------
+
+    /// <summary>
+    /// Whether a tree item may go into a folder (null is the top level). Matches what the database allows:
+    /// an entry needs Edit on the folder it leaves and the one it goes to; a folder needs Manage on itself and Edit on where it goes.
+    /// </summary>
+    public bool CanMove(TreeNodeViewModel node, ConnectionFolder? target) => WhyNotMove(node, target) is null;
+
+    /// <summary>Why the item cannot go into the folder, in a few words, or null when it can.</summary>
+    private string? WhyNotMove(TreeNodeViewModel node, ConnectionFolder? target)
+    {
+        if (node.Folder is { } folder)
+        {
+            if (ReferenceEquals(node.Parent?.Folder, target)) return "current folder";
+            if (!Document.CanMove(folder, target)) return "inside this folder";
+            if (AccessFor(folder) < AccessLevel.Manage) return "needs Manage on the folder";
+        }
+        else
+        {
+            if (ReferenceEquals(node.Parent?.Folder, target)) return "current folder";
+            if (!Document.CanMove(node.Entry!, target)) return "not available";
+            if (!CanChange(node.Parent?.Folder)) return "needs Edit where it is now";
+        }
+        return CanChange(target) ? null : "read only";
+    }
+
+    /// <summary>True when the item could be moved somewhere, so dragging it is worth starting.</summary>
+    public bool CanStartMove(TreeNodeViewModel node) =>
+        node.Folder is { } f ? AccessFor(f) >= AccessLevel.Manage : CanChange(node.Parent?.Folder);
+
+    private bool CanMoveSelected() => SelectedNode is { } node && CanStartMove(node);
+
+    /// <summary>Moves an entry or folder (and everything in it) into another folder, or the top level when null.</summary>
+    public void Move(TreeNodeViewModel node, ConnectionFolder? target)
+    {
+        if (!CanMove(node, target)) return;
+        var name = node.Folder?.Name ?? node.Entry!.Name;
+        var id = node.Folder?.Id ?? node.Entry!.Id;
+        var moved = node.Folder is { } folder ? Document.Move(folder, target) : Document.Move(node.Entry!, target);
+        if (!moved) return;
+        if (!SaveDocument(id)) return;
+        // A folder moved in the shared database inherits permissions from its new place: reload to see them.
+        if (node.Folder is not null && IsSqlStore) OnExternalChange();
+        StatusText = $"Moved {name} to {(target is null ? "the top level" : $"'{target.Name}'")}";
+        _log.Info($"Moved '{name}' to {target?.Name ?? "the top level"}");
+    }
+
+    /// <summary>Asks before a drag and drop move that carries a whole folder.</summary>
+    public bool ConfirmMove(string message) => _dialogs.Confirm(message, "Move");
+
+    [RelayCommand(CanExecute = nameof(CanMoveSelected))]
+    private void MoveTo()
+    {
+        if (SelectedNode is not { } node) return;
+        var targets = MoveTargets(node);
+        if (!targets.Any(t => t.Allowed))
+        {
+            _dialogs.Info("There is no folder you can move this to.", "Move");
+            return;
+        }
+        var name = node.Folder?.Name ?? node.Entry!.Name;
+        if (_dialogs.PickMoveTarget(name, targets) is { Allowed: true } picked) Move(node, picked.Folder);
+    }
+
+    /// <summary>The top level and every folder, in tree order, each saying whether the item can go there.</summary>
+    private List<MoveTarget> MoveTargets(TreeNodeViewModel node)
+    {
+        var list = new List<MoveTarget> { new(null, "Top level", 0, WhyNotMove(node, null)) };
+        void Walk(IEnumerable<ConnectionFolder> folders, int depth)
+        {
+            foreach (var folder in folders)
+            {
+                list.Add(new MoveTarget(folder, folder.Name, depth, WhyNotMove(node, folder)));
+                Walk(folder.Folders, depth + 1);
+            }
+        }
+        Walk(Document.Folders, 1);
+        return list;
+    }
+
     private bool CanEditSelected() => SelectedNode is not null && CanChange(SelectedNode.Folder ?? ParentOfSelected);
 
     /// <summary>Deleting a folder changes it and the folder it sits in.</summary>
@@ -843,6 +1081,8 @@ public sealed partial class ShellViewModel : ObservableObject
     private void CloseTab(TabViewModelBase? tab)
     {
         if (tab is null || !tab.CanClose) return;
+        if (tab is WebAppTabViewModel app && !app.ConfirmClose()) return;
+        if (tab is StorageTabViewModel storage && !storage.ConfirmClose()) return;
         var index = Tabs.IndexOf(tab);
         Tabs.Remove(tab);
         if (tab is IDisposable d) d.Dispose();
@@ -895,7 +1135,20 @@ public sealed partial class ShellViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void Reload() => OnExternalChange();
+    private void Reload()
+    {
+        if (_unsavedWhileOffline && !_dialogs.Confirm(
+                "You have changes that could not be saved because the database was unreachable. Reloading throws them away.\n\nReload anyway?",
+                "Unsaved changes"))
+            return;
+        OnExternalChange();
+    }
+
+    /// <summary>Asks before closing while changes from an offline spell are still waiting to be saved. False keeps the window open.</summary>
+    public bool ConfirmClose() =>
+        !_unsavedWhileOffline || _dialogs.Confirm(
+            "You have changes that could not be saved because the database is unreachable. Closing RCM now loses them.\n\nClose anyway?",
+            "Unsaved changes");
 
     [RelayCommand]
     private void ToggleNavigation() => NavigationVisible = !NavigationVisible;

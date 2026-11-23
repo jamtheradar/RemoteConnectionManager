@@ -61,13 +61,13 @@ public sealed class SqlConnectionFactory
         try
         {
             connection.Open();
+            _afterOpen?.Invoke(connection);
         }
         catch (Exception ex) when (ex is SqlException or InvalidOperationException or TimeoutException)
         {
             connection.Dispose();
             throw new SqlStoreUnavailableException($"Could not connect to {DisplayName}: {ex.Message}", ex);
         }
-        _afterOpen?.Invoke(connection);
         return connection;
     }
 
@@ -85,6 +85,8 @@ internal static class SqlErrors
     public const int Invalid = 50004;
     public const int MissingProcedure = 2812;
     public const int PermissionDenied = 229;
+    /// <summary>SqlClient's number for a command or connection timeout.</summary>
+    public const int Timeout = -2;
 
     /// <summary>Turns RCM's own error numbers into the store exceptions the shell understands.</summary>
     public static Exception Translate(SqlException ex) => ex.Number switch

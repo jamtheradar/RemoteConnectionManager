@@ -118,6 +118,8 @@ internal sealed class SavePlan
         ConnectionKind.KeyVault => "keyvault",
         ConnectionKind.Ssh => "ssh",
         ConnectionKind.Web => "web",
+        ConnectionKind.WebApp => "webapp",
+        ConnectionKind.StorageAccount => "storage",
         _ => kind.ToString().ToLowerInvariant(),
     };
 }

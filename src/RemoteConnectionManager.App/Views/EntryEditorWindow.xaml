@@ -38,7 +38,7 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
-                    <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
+                    <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
                 </Grid.RowDefinitions>
                 <TextBlock Style="{StaticResource Label}" Text="Name" />
                 <TextBox Grid.Column="1" Style="{StaticResource Field}" x:Name="NameBox" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
@@ -383,6 +383,48 @@
                     <TextBox Grid.Column="1" Style="{StaticResource Field}" Text="{Binding VaultUri, UpdateSourceTrigger=PropertyChanged}" ToolTip="https://name.vault.azure.net" />
                     <TextBlock Grid.Row="1" Style="{StaticResource Label}" Text="Tenant ID" />
                     <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource Field}" Text="{Binding TenantId, UpdateSourceTrigger=PropertyChanged}" ToolTip="Optional" />
+                </Grid>
+            </StackPanel>
+
+            <StackPanel Visibility="{Binding IsWebApp, Converter={StaticResource BoolToVis}}">
+                <TextBlock Style="{StaticResource Section}" Text="Azure Web App" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="130" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition /><RowDefinition /><RowDefinition />
+                    </Grid.RowDefinitions>
+                    <TextBlock Style="{StaticResource Label}" Text="Resource ID" />
+                    <TextBox Grid.Column="1" Style="{StaticResource Field}" Text="{Binding WebAppResourceId, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap"
+                             ToolTip="/subscriptions/{id}/resourceGroups/{group}/providers/Microsoft.Web/sites/{name}, optionally /slots/{slot}. An Azure portal address works too." />
+                    <TextBlock Grid.Row="1" Style="{StaticResource Label}" Text="Tenant ID" />
+                    <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource Field}" Text="{Binding WebAppTenantId, UpdateSourceTrigger=PropertyChanged}" ToolTip="Optional. Only needed when the subscription is in another tenant." />
+                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
+                               Text="Easier: open the Azure browser (Ctrl+Shift+K), select the app and press Pin to tree." />
+                </Grid>
+            </StackPanel>
+
+            <StackPanel Visibility="{Binding IsStorage, Converter={StaticResource BoolToVis}}">
+                <TextBlock Style="{StaticResource Section}" Text="Azure Storage account" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="130" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
+                    </Grid.RowDefinitions>
+                    <TextBlock Style="{StaticResource Label}" Text="Resource ID" />
+                    <TextBox Grid.Column="1" Style="{StaticResource Field}" Text="{Binding StorageResourceId, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap"
+                             ToolTip="/subscriptions/{id}/resourceGroups/{group}/providers/Microsoft.Storage/storageAccounts/{name}. An Azure portal address works too." />
+                    <TextBlock Grid.Row="1" Style="{StaticResource Label}" Text="Container" />
+                    <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource Field}" Text="{Binding StorageContainer, UpdateSourceTrigger=PropertyChanged}" ToolTip="Optional. The container to open first." />
+                    <TextBlock Grid.Row="2" Style="{StaticResource Label}" Text="Tenant ID" />
+                    <TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource Field}" Text="{Binding StorageTenantId, UpdateSourceTrigger=PropertyChanged}" ToolTip="Optional. Only needed when the subscription is in another tenant." />
+                    <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
+                               Text="Signs in with Entra ID only, so your account needs a Storage Blob Data role (Reader to browse, Contributor to change). Easier: pin it from the Azure browser (Ctrl+Shift+K)." />
                 </Grid>
             </StackPanel>
 

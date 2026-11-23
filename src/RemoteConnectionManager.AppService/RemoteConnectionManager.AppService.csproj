@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>RemoteConnectionManager.AppService</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Web Apps and Function Apps (Microsoft.Web/sites) through Azure Resource Manager. -->
+    <PackageReference Include="Azure.ResourceManager.AppService" Version="1.5.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Azure sign in (AzureAuth) and subscription listing are shared with Key Vault. -->
+    <ProjectReference Include="..\RemoteConnectionManager.KeyVault\RemoteConnectionManager.KeyVault.csproj" />
+  </ItemGroup>
+</Project>

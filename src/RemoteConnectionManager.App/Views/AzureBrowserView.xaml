@@ -30,21 +30,36 @@
         <Border Background="{StaticResource Chrome.Panel}" BorderBrush="{StaticResource Chrome.Border}" BorderThickness="0,0,0,1" Padding="12,8">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button Style="{StaticResource AccentButton}" Padding="12,3" Margin="0,0,6,0" Content="Sign in" Command="{Binding SignInCommand}"
-                            Visibility="{Binding IsSignedIn, Converter={StaticResource InverseBoolToVisLocal}}"
+                    <Button Style="{StaticResource AccentButton}" Padding="12,3" Margin="0,0,6,0" Content="{Binding SignInLabel}" Command="{Binding SignInCommand}"
+                            Visibility="{Binding ShowSignIn, Converter={StaticResource BoolToVis}}"
                             ToolTip="Uses the account Windows is signed in with, and asks only if that does not work" />
                     <Button Style="{StaticResource BarButton}" Content="Use another account" Command="{Binding SignInAnotherCommand}" />
                     <Button Style="{StaticResource BarButton}" Content="Sign out" Command="{Binding SignOutCommand}" Margin="0"
                             Visibility="{Binding IsSignedIn, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
                 <TextBlock Style="{StaticResource Glyph}" Text="&#xE753;" HorizontalAlignment="Left" Margin="0,0,10,0" Foreground="{StaticResource Chrome.Accent}" />
-                <TextBlock Text="{Binding AccountText}" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding AccountText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding NeedsSignIn}" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource Chrome.Warn}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </DockPanel>
         </Border>
 
         <!-- Toolbar -->
-        <Border Grid.Row="1" Background="{StaticResource Chrome.Panel}" BorderBrush="{StaticResource Chrome.Border}" BorderThickness="0,0,0,1" Padding="8,6">
+        <Border Grid.Row="1" Background="{StaticResource Chrome.Panel}" BorderBrush="{StaticResource Chrome.Border}" BorderThickness="0,0,0,1" Padding="8,6,8,0">
             <DockPanel>
+                <!-- Busy line along the bottom of the toolbar -->
+                <Grid DockPanel.Dock="Bottom" Height="2" Margin="-8,6,-8,0">
+                    <ProgressBar IsIndeterminate="True" Height="2" BorderThickness="0"
+                                 Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+                </Grid>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                     <TextBlock Text="Open by name" Style="{StaticResource Muted}" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0" />
                     <Grid Width="240">
@@ -56,15 +71,15 @@
                     <Button Style="{StaticResource BarButton}" Content="Open" Command="{Binding OpenNamedCommand}" Margin="6,0,0,0" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal">
-                    <Button Style="{StaticResource AccentButton}" Padding="10,3" Margin="0,0,6,0" Content="Open vault" Command="{Binding OpenSelectedCommand}" />
+                    <Button Style="{StaticResource AccentButton}" Padding="10,3" Margin="0,0,6,0" Content="{Binding OpenLabel}" Command="{Binding OpenSelectedCommand}" />
                     <Button Style="{StaticResource BarButton}" Content="Pin to tree" Command="{Binding PinSelectedCommand}"
-                            ToolTip="Adds the vault as a (KV) entry in the folder selected in the navigation tree" />
+                            ToolTip="Adds the vault or Web App as a (KV) or (APP) entry in the folder selected in the navigation tree" />
                     <Button Style="{StaticResource IconButton}" Content="&#xE72C;" ToolTip="Refresh" Command="{Binding RefreshCommand}" />
                     <Rectangle Width="1" Margin="6,2" Fill="{StaticResource Chrome.Border}" />
                     <Grid Width="220" Margin="4,0,0,0">
                         <TextBox x:Name="FilterBox" Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}" Height="24" Padding="24,2,6,2" FontSize="12" />
                         <TextBlock Style="{StaticResource Glyph}" Text="&#xE71C;" FontSize="12" HorizontalAlignment="Left" Margin="7,0,0,0" Foreground="{StaticResource Chrome.TextMuted}" IsHitTestVisible="False" />
-                        <TextBlock Text="Filter vaults" Style="{StaticResource Muted}" FontSize="12" Margin="26,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"
+                        <TextBlock Text="Filter vaults and apps" Style="{StaticResource Muted}" FontSize="12" Margin="26,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"
                                    Visibility="{Binding Text, ElementName=FilterBox, Converter={StaticResource EmptyToVis}}" />
                     </Grid>
                 </StackPanel>
@@ -76,12 +91,14 @@
                 Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}">
             <DockPanel>
                 <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="&#xE711;" FontSize="10" Padding="4" MinWidth="0" ToolTip="Dismiss" Command="{Binding DismissErrorCommand}" />
+                <Button DockPanel.Dock="Right" Style="{StaticResource BarButton}" Content="Sign in again" Margin="8,0,6,0" Command="{Binding SignInCommand}"
+                        Visibility="{Binding ErrorNeedsSignIn, Converter={StaticResource BoolToVis}}" />
                 <TextBlock Style="{StaticResource Glyph}" Text="&#xE783;" HorizontalAlignment="Left" Foreground="{StaticResource Chrome.Danger}" Margin="0,0,8,0" />
                 <TextBlock Text="{Binding ErrorText}" TextWrapping="Wrap" VerticalAlignment="Center" />
             </DockPanel>
         </Border>
 
-        <!-- Subscriptions > resource groups > vaults -->
+        <!-- Subscriptions > resource groups > vaults and Web Apps -->
         <TreeView Grid.Row="3" x:Name="Tree" ItemsSource="{Binding Roots}" Padding="8,6" SelectedItemChanged="Tree_SelectedItemChanged" MouseDoubleClick="Tree_MouseDoubleClick">
             <TreeView.ItemTemplate>
                 <HierarchicalDataTemplate DataType="{x:Type vm:AzureNodeViewModel}" ItemsSource="{Binding Children}">
@@ -99,10 +116,21 @@
             </TreeView.ItemTemplate>
         </TreeView>
         <TextBlock Grid.Row="3" Text="{Binding BusyText}" Style="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0"
-                   Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" IsHitTestVisible="False" />
+                   TextWrapping="Wrap" TextAlignment="Center" MaxWidth="420"
+                   Visibility="{Binding ShowBusyOverlay, Converter={StaticResource BoolToVis}}" IsHitTestVisible="False" />
 
+        <!-- Summary, or what is happening right now -->
         <Border Grid.Row="4" Background="{StaticResource Chrome.Panel}" BorderBrush="{StaticResource Chrome.Border}" BorderThickness="0,1,0,0" Padding="10,4">
-            <TextBlock Text="{Binding SummaryText}" Style="{StaticResource Muted}" FontSize="11" TextTrimming="CharacterEllipsis" />
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Style="{StaticResource BarButton}" Content="Cancel" Margin="8,0,0,0" Padding="8,0" FontSize="11" Command="{Binding CancelCommand}"
+                        Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+                <Grid VerticalAlignment="Center">
+                    <TextBlock Text="{Binding SummaryText}" Style="{StaticResource Muted}" FontSize="11" TextTrimming="CharacterEllipsis"
+                               Visibility="{Binding IsBusy, Converter={StaticResource InverseBoolToVisLocal}}" />
+                    <TextBlock Text="{Binding BusyText}" FontSize="11" TextTrimming="CharacterEllipsis" ToolTip="{Binding BusyText}"
+                               Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+                </Grid>
+            </DockPanel>
         </Border>
     </Grid>
 </UserControl>

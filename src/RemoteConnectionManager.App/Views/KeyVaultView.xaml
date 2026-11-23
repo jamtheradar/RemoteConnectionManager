@@ -35,6 +35,22 @@
         <Border Background="{StaticResource Chrome.Panel}" BorderBrush="{StaticResource Chrome.Border}" BorderThickness="0,0,0,1">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="8,0">
+                    <TextBlock Style="{StaticResource Glyph}" Text="&#xE77B;" FontSize="11" Margin="0,0,5,0" VerticalAlignment="Center" Foreground="{StaticResource Icon.Azure}" />
+                    <TextBlock x:Name="AccountLabel" Text="{Binding AccountText}" FontSize="11" VerticalAlignment="Center" ToolTip="The Azure account this vault is read with">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource Muted}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding NeedsSignIn}" Value="True">
+                                        <Setter Property="Foreground" Value="{StaticResource Chrome.Warn}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <Button Style="{StaticResource IconButton}" Content="&#xE72E;" FontSize="11" Padding="4,2" MinWidth="0" Margin="4,0,0,0"
+                            ToolTip="Sign in again" Command="{Binding SignInCommand}" Foreground="{StaticResource Chrome.Warn}"
+                            Visibility="{Binding NeedsSignIn, Converter={StaticResource BoolToVis}}" />
+                    <Rectangle Width="1" Height="14" Fill="{StaticResource Chrome.Border}" Margin="8,0" />
                     <TextBlock Text="{Binding VaultUriText}" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" />
                     <Button Style="{StaticResource IconButton}" Content="&#xE8C8;" FontSize="11" Padding="4,2" MinWidth="0" Margin="4,0,0,0"
                             ToolTip="Copy the vault URI" Command="{Binding CopyVaultUriCommand}" Foreground="{StaticResource Chrome.TextMuted}" />
@@ -59,9 +75,21 @@
         </Border>
 
         <!-- Toolbar -->
-        <Border Grid.Row="1" Background="{StaticResource Chrome.Panel}" BorderBrush="{StaticResource Chrome.Border}" BorderThickness="0,0,0,1" Padding="8,6">
+        <Border Grid.Row="1" Background="{StaticResource Chrome.Panel}" BorderBrush="{StaticResource Chrome.Border}" BorderThickness="0,0,0,1" Padding="8,6,8,0">
             <DockPanel>
-                <TextBlock DockPanel.Dock="Right" Text="{Binding CountsText}" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="8,0,0,0" />
+                <!-- Busy line along the bottom of the toolbar, so a refresh is always visible -->
+                <Grid DockPanel.Dock="Bottom" Height="2" Margin="-8,4,-8,0">
+                    <ProgressBar IsIndeterminate="True" Height="2" BorderThickness="0"
+                                 Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+                </Grid>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="8,0,0,0">
+                    <TextBlock Text="{Binding CountsText}" Style="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center"
+                               Visibility="{Binding IsBusy, Converter={StaticResource InverseBoolToVisLocal}}" />
+                    <TextBlock Text="{Binding BusyText}" FontSize="11" VerticalAlignment="Center" Foreground="{StaticResource Chrome.Text}" MaxWidth="420" TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding BusyText}" Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+                    <Button Style="{StaticResource BarButton}" Content="Cancel" Margin="8,0,0,0" Padding="8,1" Command="{Binding CancelCommand}"
+                            Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+                </StackPanel>
                 <StackPanel Orientation="Horizontal">
                     <Button Style="{StaticResource AccentButton}" Padding="10,3" Margin="0,0,6,0" Command="{Binding NewCommand}" ToolTip="{Binding NewLabel}">
                         <StackPanel Orientation="Horizontal">
@@ -89,6 +117,8 @@
                 Visibility="{Binding HasError, Converter={StaticResource BoolToVis}}">
             <DockPanel>
                 <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Content="&#xE711;" FontSize="10" Padding="4" MinWidth="0" ToolTip="Dismiss" Command="{Binding DismissErrorCommand}" />
+                <Button DockPanel.Dock="Right" Style="{StaticResource BarButton}" Content="Sign in again" Margin="8,0,6,0" Command="{Binding SignInCommand}"
+                        Visibility="{Binding ErrorNeedsSignIn, Converter={StaticResource BoolToVis}}" />
                 <TextBlock Style="{StaticResource Glyph}" Text="&#xE783;" HorizontalAlignment="Left" Foreground="{StaticResource Chrome.Danger}" Margin="0,0,8,0" />
                 <TextBlock Text="{Binding ErrorText}" TextWrapping="Wrap" VerticalAlignment="Center" />
             </DockPanel>
@@ -152,7 +182,8 @@
                     <TextBlock Text="{Binding EmptyText}" Style="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0"
                                Visibility="{Binding EmptyText, Converter={StaticResource StringToVis}}" IsHitTestVisible="False" />
                     <TextBlock Text="{Binding BusyText}" Style="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0"
-                               Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" IsHitTestVisible="False" />
+                               TextWrapping="Wrap" TextAlignment="Center" MaxWidth="420"
+                               Visibility="{Binding ShowBusyOverlay, Converter={StaticResource BoolToVis}}" IsHitTestVisible="False" />
                 </Grid>
             </DockPanel>
 

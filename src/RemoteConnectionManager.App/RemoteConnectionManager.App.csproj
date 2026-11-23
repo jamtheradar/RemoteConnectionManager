@@ -43,6 +43,8 @@
     <ProjectReference Include="..\RemoteConnectionManager.Data.SqlServer\RemoteConnectionManager.Data.SqlServer.csproj" />
     <ProjectReference Include="..\RemoteConnectionManager.Rdp\RemoteConnectionManager.Rdp.csproj" />
     <ProjectReference Include="..\RemoteConnectionManager.KeyVault\RemoteConnectionManager.KeyVault.csproj" />
+    <ProjectReference Include="..\RemoteConnectionManager.AppService\RemoteConnectionManager.AppService.csproj" />
+    <ProjectReference Include="..\RemoteConnectionManager.Storage\RemoteConnectionManager.Storage.csproj" />
     <ProjectReference Include="..\RemoteConnectionManager.Plugins\RemoteConnectionManager.Plugins.csproj" />
     <ProjectReference Include="..\RemoteConnectionManager.Plugins.OnePassword\RemoteConnectionManager.Plugins.OnePassword.csproj" />
     <ProjectReference Include="..\RemoteConnectionManager.Plugins.ServerChecks\RemoteConnectionManager.Plugins.ServerChecks.csproj" />

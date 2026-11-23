@@ -40,6 +40,13 @@ public static class ConnectionSearch
                 yield return ssh.Protocol.ToString();
                 if (ssh.UserName is { } u) yield return u;
                 break;
+            case StorageAccountConnection storage:
+                yield return storage.ResourceId;
+                if (storage.Container is { } container) yield return container;
+                break;
+            case WebAppConnection app:
+                yield return app.ResourceId;
+                break;
             case WebConnection web:
                 yield return web.Url;
                 break;

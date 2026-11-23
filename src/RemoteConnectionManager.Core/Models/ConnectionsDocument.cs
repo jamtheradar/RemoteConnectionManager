@@ -61,6 +61,37 @@ public sealed class ConnectionsDocument
         return parent is not null && parent.Folders.Remove(folder);
     }
 
+    /// <summary>The folder an entry would go into (null is the top level) is not where it already is.</summary>
+    public bool CanMove(ConnectionEntry entry, ConnectionFolder? target) =>
+        !ReferenceEquals(ParentOf(entry), target) && (target is null || AllFolders().Contains(target));
+
+    /// <summary>
+    /// A folder can go anywhere except where it already is, into itself or into a folder inside it.
+    /// </summary>
+    public bool CanMove(ConnectionFolder folder, ConnectionFolder? target)
+    {
+        if (ReferenceEquals(ParentOf(folder), target)) return false;
+        if (target is null) return true;
+        if (ReferenceEquals(folder, target) || Descendants(folder).Contains(target)) return false;
+        return AllFolders().Contains(target);
+    }
+
+    /// <summary>Moves an entry to the end of another folder (null is the top level). False when it cannot go there.</summary>
+    public bool Move(ConnectionEntry entry, ConnectionFolder? target)
+    {
+        if (!CanMove(entry, target) || !Remove(entry)) return false;
+        (target?.Connections ?? Connections).Add(entry);
+        return true;
+    }
+
+    /// <summary>Moves a folder and everything in it to the end of another folder (null is the top level). False when it cannot go there.</summary>
+    public bool Move(ConnectionFolder folder, ConnectionFolder? target)
+    {
+        if (!CanMove(folder, target) || !Remove(folder)) return false;
+        (target?.Folders ?? Folders).Add(folder);
+        return true;
+    }
+
     [JsonIgnore]
     public int EntryCount => AllEntries().Count();
 

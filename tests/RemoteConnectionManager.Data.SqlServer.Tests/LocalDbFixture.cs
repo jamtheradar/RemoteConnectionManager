@@ -52,7 +52,8 @@ public sealed class LocalDbFixture : IDisposable
     public SqlConnectionFactory Admin() => new(ConnectionString(Database), "localdb/" + Database);
 
     /// <summary>Creates (once) a login in rcm_user and returns a factory whose connections run as it.</summary>
-    public SqlConnectionFactory As(string name, bool inRole = true)
+    /// <param name="isDown">When it returns true, opening a connection fails as if the server could not be reached.</param>
+    public SqlConnectionFactory As(string name, bool inRole = true, Func<bool>? isDown = null)
     {
         var login = LoginName(name);
         if (!_logins.Contains(login))
@@ -65,7 +66,11 @@ public sealed class LocalDbFixture : IDisposable
             _logins.Add(login);
         }
         return new SqlConnectionFactory(ConnectionString(Database), "localdb/" + Database,
-            c => Exec(c, $"EXECUTE AS LOGIN = N'{login}'"));
+            c =>
+            {
+                if (isDown?.Invoke() == true) throw new TimeoutException("Simulated outage");
+                Exec(c, $"EXECUTE AS LOGIN = N'{login}'");
+            });
     }
 
     public string LoginName(string name) => $"rcm_t_{name}_{Suffix}";

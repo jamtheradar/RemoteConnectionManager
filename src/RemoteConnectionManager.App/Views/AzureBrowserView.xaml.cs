@@ -22,11 +22,11 @@ public partial class AzureBrowserView : UserControl
 
     private void Tree_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        // Only a double click on a vault row opens it; on a group it just expands.
-        if (Vm is not { } vm || vm.SelectedNode?.Vault is null) return;
+        // Only a double click on a vault or Web App row opens it; on a group it just expands.
+        if (Vm is not { } vm || vm.SelectedNode?.IsOpenable != true) return;
         for (var d = e.OriginalSource as DependencyObject; d is not null && d != Tree; d = VisualTreeHelper.GetParent(d))
         {
-            if (d is TreeViewItem { DataContext: AzureNodeViewModel { IsVault: true } })
+            if (d is TreeViewItem { DataContext: AzureNodeViewModel { IsOpenable: true } })
             {
                 vm.OpenSelectedCommand.Execute(null);
                 e.Handled = true;

@@ -198,6 +198,8 @@ public sealed class SqlConnectionStore : IConnectionStore
 
     public void Save(ConnectionsDocument document)
     {
+        // Lost (not Cached): the rows last loaded are still right, so the shell may keep the change and save it once the database is back.
+        if (_offline == OfflineState.Lost) throw new StoreUnavailableException(ReadOnlyReason ?? "The database cannot be reached.");
         if (ReadOnlyReason is { } reason) throw new StorePermissionException(reason);
 
         Dictionary<Guid, RowState> oldFolders, oldEntries;
@@ -214,7 +216,17 @@ public sealed class SqlConnectionStore : IConnectionStore
         var defaultsChanged = defaultsJson != oldDefaults;
         if (plan.IsEmpty && !defaultsChanged) return;
 
-        using var connection = _factory.Open();
+        SqlConnection connection;
+        try
+        {
+            connection = _factory.Open();
+        }
+        catch (SqlStoreUnavailableException ex)
+        {
+            MarkLost(ex.Message);
+            throw new StoreUnavailableException(ex.Message, ex);
+        }
+        using var _ = connection;
         using var tx = connection.BeginTransaction(IsolationLevel.ReadCommitted);
         var newFolders = new Dictionary<Guid, RowState>(oldFolders);
         var newEntries = new Dictionary<Guid, RowState>(oldEntries);
@@ -275,6 +287,14 @@ public sealed class SqlConnectionStore : IConnectionStore
                 stamp = Convert.ToInt64(cmd.ExecuteScalar());
             tx.Commit();
         }
+        catch (SqlException ex) when (IsConnectionFailure(ex, connection))
+        {
+            // The link dropped or timed out part way. If the commit did land, the row versions turn the retry into a conflict and a reload.
+            TryRollback(tx);
+            var message = $"Lost {_factory.DisplayName} while saving: {ex.Message}";
+            MarkLost(message);
+            throw new StoreUnavailableException(message, ex);
+        }
         catch (SqlException ex)
         {
             TryRollback(tx);
@@ -303,6 +323,20 @@ public sealed class SqlConnectionStore : IConnectionStore
     {
         // XACT_ABORT in the procedures may already have rolled the transaction back.
         try { tx.Rollback(); } catch (InvalidOperationException) { } catch (SqlException) { }
+    }
+
+    /// <summary>A timeout, or an error that broke the connection (severity 20 and up), as opposed to RCM's own errors.</summary>
+    private static bool IsConnectionFailure(SqlException ex, SqlConnection connection) =>
+        ex.Number == SqlErrors.Timeout || ex.Class >= 20 || connection.State != ConnectionState.Open;
+
+    /// <summary>Goes read only after the database was loaded and then could not be reached. Put back by the next good <see cref="Poll"/>.</summary>
+    private void MarkLost(string why)
+    {
+        if (_offline != OfflineState.Online) return;
+        _reasonBeforeLost = ReadOnlyReason;
+        ReadOnlyReason = $"{OfflinePrefix} lost the database at {DateTime.Now:t}. Changes are blocked until it is back. ({why})";
+        _offline = OfflineState.Lost;
+        StatusChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private static string Truncate(string value, int max) => value.Length <= max ? value : value[..max];
@@ -351,13 +385,7 @@ public sealed class SqlConnectionStore : IConnectionStore
             catch (SqlStoreUnavailableException ex)
             {
                 _log?.Invoke($"Change check failed: {ex.Message}");
-                if (_offline == OfflineState.Online)
-                {
-                    _reasonBeforeLost = ReadOnlyReason;
-                    ReadOnlyReason = $"{OfflinePrefix} lost the database at {DateTime.Now:t}. Changes are blocked until it is back. ({ex.Message})";
-                    _offline = OfflineState.Lost;
-                    StatusChanged?.Invoke(this, EventArgs.Empty);
-                }
+                MarkLost(ex.Message);
                 return false;
             }
 

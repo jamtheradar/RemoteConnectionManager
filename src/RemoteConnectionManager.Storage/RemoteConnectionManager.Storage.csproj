@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>RemoteConnectionManager.Storage</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Storage accounts, endpoints and blob service settings (soft delete) through Azure Resource Manager. -->
+    <PackageReference Include="Azure.ResourceManager.Storage" Version="1.9.0" />
+    <!-- Blob data, signed in with Entra ID only (Storage Blob Data roles). -->
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.30.1" />
+    <!-- Real folders, rename and recursive delete on accounts with a hierarchical namespace (ADLS Gen2). -->
+    <PackageReference Include="Azure.Storage.Files.DataLake" Version="12.28.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Azure sign in (AzureAuth) and subscription listing are shared with Key Vault. -->
+    <ProjectReference Include="..\RemoteConnectionManager.KeyVault\RemoteConnectionManager.KeyVault.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="RemoteConnectionManager.Core.Tests" />
+  </ItemGroup>
+</Project>

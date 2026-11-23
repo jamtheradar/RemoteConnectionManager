@@ -192,6 +192,23 @@ public class PluginTests
     }
 
     [Fact]
+    public void Select_StoppedPerUserServiceInstancesAreOnDemand()
+    {
+        ServiceInfo[] services =
+        [
+            Svc("MSSQLSERVER", "SQL Server (MSSQLSERVER)"),
+            Svc("cbdhsvc_102b424", "Clipboard User Service_102b424", "Stopped"),
+            Svc("OneSyncSvc_102b424", "Sync Host_102b424", "Stopped"),
+            Svc("W3SVC", "World Wide Web Publishing Service", "Stopped"),
+        ];
+
+        var rows = ServiceFilter.Select(services, ["MSSQLSERVER"], showAll: false);
+        Assert.Equal(["MSSQLSERVER", "W3SVC"], rows.Select(r => r.Service.Name));
+        Assert.Equal(2, ServiceFilter.CountOnDemandHidden(services, ["MSSQLSERVER"]));
+        Assert.False(ServiceFilter.IsPerUserInstance(Svc("SQL_Agent", "x")));
+    }
+
+    [Fact]
     public void Select_OnDemandServicesHiddenUnlessShowAllOrWatched()
     {
         // sppsvc is automatic and stopped, but it is a known on demand service.

@@ -96,6 +96,12 @@ public sealed partial class EntryEditorViewModel : ObservableObject
     // Key Vault
     [ObservableProperty] private string _vaultUri = string.Empty;
     [ObservableProperty] private string _tenantId = string.Empty;
+    /// <summary>The Web App's resource ID, or a portal address that contains it.</summary>
+    [ObservableProperty] private string _webAppResourceId = string.Empty;
+    [ObservableProperty] private string _webAppTenantId = string.Empty;
+    [ObservableProperty] private string _storageResourceId = string.Empty;
+    [ObservableProperty] private string _storageTenantId = string.Empty;
+    [ObservableProperty] private string _storageContainer = string.Empty;
 
     // SSH and telnet (Host is shared with RDP)
     [ObservableProperty]
@@ -126,6 +132,8 @@ public sealed partial class EntryEditorViewModel : ObservableObject
     public bool IsKeyVault { get; private init; }
     public bool IsSsh { get; private init; }
     public bool IsWeb { get; private init; }
+    public bool IsWebApp { get; private init; }
+    public bool IsStorage { get; private init; }
     public bool IsSshProtocol => SshProtocol == TerminalProtocol.Ssh;
     public string SshPortHint => SshProtocol == TerminalProtocol.Telnet ? "Blank = 23" : "Blank = 22";
     public bool ShowSshCredential => IsSsh || IsFolder;
@@ -285,6 +293,8 @@ public sealed partial class EntryEditorViewModel : ObservableObject
             IsKeyVault = entry is KeyVaultConnection,
             IsSsh = entry is SshConnection,
             IsWeb = entry is WebConnection,
+            IsWebApp = entry is WebAppConnection,
+            IsStorage = entry is StorageAccountConnection,
             WindowTitle = isNew ? $"New {entry.Prefix} entry" : $"Edit: {entry.Name}",
             Name = entry.Name,
             Description = entry.Description ?? string.Empty,
@@ -336,6 +346,15 @@ public sealed partial class EntryEditorViewModel : ObservableObject
                 vm.VaultUri = kv.VaultUri;
                 vm.TenantId = kv.TenantId ?? string.Empty;
                 break;
+            case WebAppConnection app:
+                vm.WebAppResourceId = app.ResourceId;
+                vm.WebAppTenantId = app.TenantId ?? string.Empty;
+                break;
+            case StorageAccountConnection storage:
+                vm.StorageResourceId = storage.ResourceId;
+                vm.StorageTenantId = storage.TenantId ?? string.Empty;
+                vm.StorageContainer = storage.Container ?? string.Empty;
+                break;
         }
         return vm;
     }
@@ -370,6 +389,13 @@ public sealed partial class EntryEditorViewModel : ObservableObject
         if (IsWeb && Core.Models.WebConnection.Normalise(Url) is null)
         { ValidationMessage = "Enter a web address, for example https://fw01.contoso.local. Only http and https are allowed."; return false; }
         if (IsKeyVault && KeyVault.VaultNames.NormaliseVaultUri(VaultUri) is null) { ValidationMessage = "Enter the vault name or its https://name.vault.azure.net address."; return false; }
+        if (IsWebApp && AppService.WebAppId.Parse(WebAppResourceId) is null)
+        { ValidationMessage = "Paste the app's resource ID (/subscriptions/.../providers/Microsoft.Web/sites/name) or its Azure portal address. Pin from the Azure browser to skip this."; return false; }
+        if (IsStorage && Storage.StorageAccountId.Parse(StorageResourceId) is null)
+        { ValidationMessage = "Paste the storage account's resource ID (/subscriptions/.../providers/Microsoft.Storage/storageAccounts/name) or its Azure portal address. Pin from the Azure browser to skip this."; return false; }
+        if (IsStorage && !string.IsNullOrWhiteSpace(StorageContainer) && Storage.BlobPaths.ValidateContainerName(StorageContainer.Trim()) is { } containerProblem
+            && StorageContainer.Trim() is not ("$root" or "$web" or "$logs"))
+        { ValidationMessage = containerProblem; return false; }
         ValidationMessage = string.Empty;
         return true;
     }
@@ -448,6 +474,15 @@ public sealed partial class EntryEditorViewModel : ObservableObject
             case KeyVaultConnection kv:
                 kv.VaultUri = KeyVault.VaultNames.NormaliseVaultUri(VaultUri)?.ToString() ?? VaultUri.Trim();
                 kv.TenantId = Blank(TenantId);
+                break;
+            case WebAppConnection app:
+                app.ResourceId = AppService.WebAppId.Parse(WebAppResourceId)?.ToString() ?? WebAppResourceId.Trim();
+                app.TenantId = Blank(WebAppTenantId);
+                break;
+            case StorageAccountConnection storage:
+                storage.ResourceId = Storage.StorageAccountId.Parse(StorageResourceId)?.ToString() ?? StorageResourceId.Trim();
+                storage.TenantId = Blank(StorageTenantId);
+                storage.Container = Blank(StorageContainer);
                 break;
         }
     }

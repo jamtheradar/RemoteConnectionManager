@@ -28,6 +28,12 @@
         <DataTemplate DataType="{x:Type vm:KeyVaultTabViewModel}">
             <views:KeyVaultView />
         </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:WebAppTabViewModel}">
+            <views:WebAppView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:StorageTabViewModel}">
+            <views:StorageView />
+        </DataTemplate>
         <DataTemplate DataType="{x:Type vm:AzureBrowserTabViewModel}">
             <views:AzureBrowserView />
         </DataTemplate>
@@ -71,7 +77,7 @@
                     <Rectangle Width="1" Margin="4,8" Fill="{StaticResource Chrome.Border}" />
                     <Button Style="{StaticResource CommandBarButton}" Content="&#xE768;" ToolTip="Connect" Command="{Binding ConnectCommand}" Foreground="{StaticResource Chrome.Ok}" />
                     <Button Style="{StaticResource CommandBarButton}" Content="&#xE756;" ToolTip="Open a PowerShell tab (Ctrl+T)" Command="{Binding QuickTerminalCommand}" Foreground="{StaticResource Icon.Terminal}" />
-                    <Button Style="{StaticResource CommandBarButton}" Content="&#xE8D7;" ToolTip="Browse Azure Key Vaults (Ctrl+Shift+K)" Command="{Binding OpenAzureBrowserCommand}" Foreground="{StaticResource Icon.Vault}" />
+                    <Button Style="{StaticResource CommandBarButton}" Content="&#xE8D7;" ToolTip="Browse Azure Key Vaults and Web Apps (Ctrl+Shift+K)" Command="{Binding OpenAzureBrowserCommand}" Foreground="{StaticResource Icon.Vault}" />
                     <Button Style="{StaticResource CommandBarButton}" Content="&#xE72E;" ToolTip="Generate a password and copy it (Ctrl+Shift+G)" x:Name="GeneratePasswordButton"
                             Click="GeneratePassword_Click" Foreground="{StaticResource Icon.Secret}" />
                     <Button x:Name="NewButton" Style="{StaticResource CommandBarButton}" Content="&#xE710;" ToolTip="New entry" Click="DropDownButton_Click" Foreground="{StaticResource Chrome.AccentLight}">
@@ -83,6 +89,8 @@
                                 <MenuItem Header="Telnet" Command="{Binding NewTelnetCommand}" />
                                 <MenuItem Header="Website" Command="{Binding NewWebsiteCommand}" />
                                 <MenuItem Header="Key Vault" Command="{Binding NewKeyVaultCommand}" />
+                                <MenuItem Header="Azure Web App" Command="{Binding NewWebAppCommand}" />
+                                <MenuItem Header="Azure Storage account" Command="{Binding NewStorageCommand}" />
                                 <Separator />
                                 <MenuItem Header="Folder" Command="{Binding NewFolderCommand}" />
                             </ContextMenu>
@@ -208,7 +216,10 @@
                     </Border>
 
                     <TreeView x:Name="Tree" ItemsSource="{Binding RootNodes}" Padding="4,4,4,0"
-                              SelectedItemChanged="Tree_SelectedItemChanged" PreviewMouseRightButtonDown="Tree_PreviewMouseRightButtonDown" MouseDoubleClick="Tree_MouseDoubleClick" KeyDown="Tree_KeyDown">
+                              ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                              SelectedItemChanged="Tree_SelectedItemChanged" PreviewMouseRightButtonDown="Tree_PreviewMouseRightButtonDown" MouseDoubleClick="Tree_MouseDoubleClick" KeyDown="Tree_KeyDown"
+                              AllowDrop="True" PreviewMouseLeftButtonDown="Tree_PreviewMouseLeftButtonDown" PreviewMouseMove="Tree_PreviewMouseMove"
+                              DragOver="Tree_DragOver" DragLeave="Tree_DragLeave" Drop="Tree_Drop">
                         <TreeView.ItemTemplate>
                             <HierarchicalDataTemplate DataType="{x:Type vm:TreeNodeViewModel}" ItemsSource="{Binding Children}">
                                 <StackPanel Orientation="Horizontal" ToolTip="{Binding Path}">
@@ -235,10 +246,13 @@
                                 <MenuItem Header="New telnet connection" Command="{Binding NewTelnetCommand}" />
                                 <MenuItem Header="New website" Command="{Binding NewWebsiteCommand}" />
                                 <MenuItem Header="New Key Vault" Command="{Binding NewKeyVaultCommand}" />
+                                <MenuItem Header="New Azure Web App" Command="{Binding NewWebAppCommand}" />
+                                <MenuItem Header="New Azure Storage account" Command="{Binding NewStorageCommand}" />
                                 <MenuItem Header="New folder" Command="{Binding NewFolderCommand}" />
                                 <Separator />
                                 <MenuItem Header="Edit" Command="{Binding EditCommand}" />
                                 <MenuItem Header="Duplicate" Command="{Binding DuplicateCommand}" />
+                                <MenuItem Header="Move to..." Command="{Binding MoveToCommand}" InputGestureText="Ctrl+M" />
                                 <MenuItem Header="Delete" Command="{Binding DeleteCommand}" />
                                 <Separator />
                                 <MenuItem Header="My watched services..." Command="{Binding MyWatchedServicesCommand}" />

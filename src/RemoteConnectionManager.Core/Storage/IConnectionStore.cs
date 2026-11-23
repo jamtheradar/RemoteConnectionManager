@@ -58,7 +58,10 @@ public interface IConnectionStore : IDisposable
 
     ConnectionsDocument Load();
 
-    /// <summary>Saves the document. Throws <see cref="StoreConflictException"/> or <see cref="StorePermissionException"/>; nothing is half saved.</summary>
+    /// <summary>
+    /// Saves the document. Throws <see cref="StoreConflictException"/>, <see cref="StorePermissionException"/> or
+    /// <see cref="StoreUnavailableException"/>; nothing is half saved.
+    /// </summary>
     void Save(ConnectionsDocument document);
 
     void StartWatching();
@@ -72,3 +75,9 @@ public sealed class StoreConflictException(string message) : Exception(message);
 
 /// <summary>The user is not allowed to make the change. The save was rolled back.</summary>
 public sealed class StorePermissionException(string message) : Exception(message);
+
+/// <summary>
+/// The store could not be reached, so the change was not saved. The store is read only until it is back
+/// (it raises <see cref="IConnectionStore.StatusChanged"/> then), and the same document can be saved again.
+/// </summary>
+public sealed class StoreUnavailableException(string message, Exception? inner = null) : Exception(message, inner);

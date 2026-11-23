@@ -185,6 +185,40 @@ public sealed partial class DashboardTabViewModel : TabViewModelBase
                 };
                 break;
             }
+            case StorageAccountConnection storage:
+            {
+                var id = Storage.StorageAccountId.Parse(storage.ResourceId);
+                CanConnect = id is not null;
+                ConnectLabel = "Open storage";
+                Properties = new[]
+                {
+                    new PropertyRow("Storage account", id is null ? $"{storage.ResourceId} (not a valid storage account resource ID)" : id.AccountName),
+                    new PropertyRow("Container", string.IsNullOrWhiteSpace(storage.Container) ? "Pick when opened" : storage.Container),
+                    new PropertyRow("Resource group", id?.ResourceGroup ?? string.Empty),
+                    new PropertyRow("Subscription", id?.SubscriptionId ?? string.Empty),
+                    new PropertyRow("Tenant", string.IsNullOrWhiteSpace(storage.TenantId) ? "Home tenant of the signed in account" : storage.TenantId),
+                    new PropertyRow("Azure account", _shell.AzureAccountText.Replace("Azure: ", string.Empty)),
+                    new PropertyRow("Access", "Entra ID only: needs a Storage Blob Data role"),
+                    new PropertyRow("Tags", entry.Tags.Count == 0 ? "none" : string.Join(", ", entry.Tags)),
+                };
+                break;
+            }
+            case WebAppConnection app:
+            {
+                var id = AppService.WebAppId.Parse(app.ResourceId);
+                CanConnect = id is not null;
+                ConnectLabel = "Open app";
+                Properties = new[]
+                {
+                    new PropertyRow("App", id is null ? $"{app.ResourceId} (not a valid Web App resource ID)" : id.DisplayName),
+                    new PropertyRow("Resource group", id?.ResourceGroup ?? string.Empty),
+                    new PropertyRow("Subscription", id?.SubscriptionId ?? string.Empty),
+                    new PropertyRow("Tenant", string.IsNullOrWhiteSpace(app.TenantId) ? "Home tenant of the signed in account" : app.TenantId),
+                    new PropertyRow("Azure account", _shell.AzureAccountText.Replace("Azure: ", string.Empty)),
+                    new PropertyRow("Tags", entry.Tags.Count == 0 ? "none" : string.Join(", ", entry.Tags)),
+                };
+                break;
+            }
             case SshConnection ssh:
             {
                 var s = _shell.ResolveSsh(ssh);

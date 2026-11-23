@@ -466,6 +466,40 @@ public sealed class SqlStoreTests
     }
 
     [Fact]
+    public void LostDatabase_DuringSave_KeepsChangeForRetry()
+    {
+        var (folder, entry) = AddFolder("Lost");
+        var group = Group("lost", "tess");
+        Grant(folder.Id, (group, AccessLevel.Edit));
+        var down = false;
+        var tess = new SqlConnectionStore(_db.As("tess", isDown: () => down), cachePath: null);
+        var statusChanges = 0;
+        tess.StatusChanged += (_, _) => statusChanges++;
+
+        var doc = tess.Load();
+        ((RdpConnection)doc.FindEntry(entry.Id)!).Host = "offline-edit";
+        down = true;
+
+        // The save fails as "unavailable", not "refused", and the store goes read only straight away.
+        Assert.Throws<StoreUnavailableException>(() => tess.Save(doc));
+        Assert.True(tess.IsReadOnly);
+        Assert.StartsWith("Offline:", tess.ReadOnlyReason);
+        Assert.Equal(1, statusChanges);
+
+        // Further saves while lost say the same, so the shell keeps the change.
+        Assert.Throws<StoreUnavailableException>(() => tess.Save(doc));
+
+        down = false;
+        tess.Poll();
+        Assert.False(tess.IsReadOnly);
+        Assert.Equal(2, statusChanges);
+
+        // The kept document saves once the database is back.
+        tess.Save(doc);
+        Assert.Equal("offline-edit", ((RdpConnection)AdminStore().Load().FindEntry(entry.Id)!).Host);
+    }
+
+    [Fact]
     public void NotInRole_GetsAClearMessage()
     {
         var factory = _db.As("rita", inRole: false);

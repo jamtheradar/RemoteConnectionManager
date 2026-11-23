@@ -43,6 +43,8 @@ public partial class App : Application
                     () => Current.MainWindow is { } w ? new System.Windows.Interop.WindowInteropHelper(w).Handle : IntPtr.Zero,
                     AppPaths.AzureAuthRecordFile));
                 services.AddSingleton<VaultCatalog>();
+                services.AddSingleton<RemoteConnectionManager.AppService.WebAppCatalog>();
+                services.AddSingleton<RemoteConnectionManager.Storage.StorageCatalog>();
 
                 // In-box plugins. Each is registered as itself and as IRcmPlugin; the registry knows
                 // which ones the user switched off (read live from settings, so Settings applies at once).
