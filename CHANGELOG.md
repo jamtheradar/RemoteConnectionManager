@@ -5,6 +5,11 @@ All notable changes to Remote Connection Manager are listed here. Each release o
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-25
+
+### Fixed
+- The left rail buttons now act on every click. Clicking Favourites again turns the filter off, and the Home button always goes back to the full list (it clears the favourites and text filters). A bar above the tree says when only favourites are shown, with a Show all button, and the count shows how many entries are listed.
+
 ## [0.4.0] - 2026-11-23
 
 ### Added
@@ -105,7 +110,8 @@ The first release.
   - Installs for the current user or for all users.
   - Needs the .NET 10 Desktop Runtime (x64).
 
-[Unreleased]: https://github.com/jamtheradar/RemoteConnectionManager/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/jamtheradar/RemoteConnectionManager/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/jamtheradar/RemoteConnectionManager/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/jamtheradar/RemoteConnectionManager/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/jamtheradar/RemoteConnectionManager/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jamtheradar/RemoteConnectionManager/compare/v0.1.0...v0.2.0
