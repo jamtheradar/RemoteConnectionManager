@@ -399,14 +399,17 @@
     </Style>
 
     <!-- ===== Rail items ===== -->
-    <Style x:Key="RailItem" TargetType="ListBoxItem">
+    <!-- Each rail button acts on every click. Tag="True" marks it active (accent bar), bound to view state rather than to selection. -->
+    <Style x:Key="RailButton" TargetType="ButtonBase">
         <Setter Property="Foreground" Value="{StaticResource Chrome.TextMuted}" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="FontFamily" Value="{StaticResource Font.Glyph}" />
+        <Setter Property="FontSize" Value="16" />
         <Setter Property="Template">
             <Setter.Value>
-                <ControlTemplate TargetType="ListBoxItem">
-                    <Grid Height="40" Width="44" Background="Transparent">
+                <ControlTemplate TargetType="ButtonBase">
+                    <Grid x:Name="Root" Height="40" Width="44" Background="Transparent">
                         <Rectangle x:Name="Bar" Width="2" HorizontalAlignment="Left" Fill="{StaticResource Chrome.Accent}" Visibility="Collapsed" />
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Grid>
@@ -414,10 +417,10 @@
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter Property="Foreground" Value="{StaticResource Chrome.Text}" />
                         </Trigger>
-                        <Trigger Property="IsSelected" Value="True">
+                        <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="True">
                             <Setter Property="Foreground" Value="{StaticResource Chrome.AccentLight}" />
                             <Setter TargetName="Bar" Property="Visibility" Value="Visible" />
-                        </Trigger>
+                        </DataTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>

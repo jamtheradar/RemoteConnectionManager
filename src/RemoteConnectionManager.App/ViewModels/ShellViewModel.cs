@@ -51,6 +51,8 @@ public sealed partial class ShellViewModel : ObservableObject
     public DashboardTabViewModel Dashboard { get; }
 
     [ObservableProperty] private string _filterText = string.Empty;
+    /// <summary>The Favourites rail button: shows only favourite entries until switched off.</summary>
+    [ObservableProperty] private bool _favouritesOnly;
     [ObservableProperty] private TreeNodeViewModel? _selectedNode;
     [ObservableProperty] private TabViewModelBase? _selectedTab;
     [ObservableProperty] private string _quickConnectHost = string.Empty;
@@ -246,10 +248,7 @@ public sealed partial class ShellViewModel : ObservableObject
             if (node.Entry is { } e) node.OpenSessions = Tabs.Count(t => t.EntryId == e.Id && t.IsLive);
         }
 
-        if (!string.IsNullOrWhiteSpace(FilterText))
-            foreach (var root in RootNodes) root.ApplyFilter(FilterText);
-
-        EntryCountText = $"{Document.EntryCount} entries";
+        ApplyTreeFilter();
         Dashboard.Refresh();
         RefreshTabColours();
 
@@ -337,10 +336,44 @@ public sealed partial class ShellViewModel : ObservableObject
         StatusText = $"Reloaded {ConnectionsFileName} at {DateTime.Now:HH:mm:ss}";
     }
 
-    partial void OnFilterTextChanged(string value)
+    partial void OnFilterTextChanged(string value) => ApplyTreeFilter();
+
+    partial void OnFavouritesOnlyChanged(bool value)
     {
-        foreach (var root in RootNodes) root.ApplyFilter(value);
+        if (value) NavigationVisible = true;
+        ApplyTreeFilter();
     }
+
+    partial void OnNavigationVisibleChanged(bool value) => OnPropertyChanged(nameof(ShowingAllEntries));
+
+    /// <summary>Lights the rail's home button: the tree is on screen with nothing filtered out.</summary>
+    public bool ShowingAllEntries => NavigationVisible && !FavouritesOnly && string.IsNullOrWhiteSpace(FilterText);
+
+    private void ApplyTreeFilter()
+    {
+        OnPropertyChanged(nameof(ShowingAllEntries));
+        foreach (var root in RootNodes) root.ApplyFilter(FilterText, FavouritesOnly);
+        if (FavouritesOnly)
+        {
+            var shown = AllNodes().Count(n => n.Entry is not null && n.IsVisible);
+            EntryCountText = $"{shown} of {Document.EntryCount} entries";
+        }
+        else EntryCountText = $"{Document.EntryCount} entries";
+    }
+
+    /// <summary>The rail's home button: show the navigation panel with every entry, whatever was filtered before.</summary>
+    [RelayCommand]
+    private void ShowAllEntries()
+    {
+        NavigationVisible = true;
+        FavouritesOnly = false;
+        FilterText = string.Empty;
+    }
+
+    [RelayCommand]
+    private void ShowDashboard() => SelectedTab = Dashboard;
+
+    public bool DashboardSelected => ReferenceEquals(SelectedTab, Dashboard);
 
     partial void OnSelectedNodeChanged(TreeNodeViewModel? value)
     {
@@ -388,6 +421,7 @@ public sealed partial class ShellViewModel : ObservableObject
     partial void OnSelectedTabChanged(TabViewModelBase? value)
     {
         foreach (var tab in Tabs) tab.IsSelected = ReferenceEquals(tab, value);
+        OnPropertyChanged(nameof(DashboardSelected));
     }
 
     // ---------- commands: entries ----------

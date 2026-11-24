@@ -268,22 +268,6 @@ public partial class ShellWindow : Window
         }
     }
 
-    private void Rail_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        switch (Rail.SelectedIndex)
-        {
-            case 0:
-                if (!_vm.NavigationVisible) _vm.NavigationVisible = true;
-                break;
-            case 1:
-                _vm.SelectedTab = _vm.Dashboard;
-                break;
-            case 2:
-                _vm.FilterText = _vm.FilterText == "favourite" ? string.Empty : "favourite";
-                break;
-        }
-    }
-
     private void AzureAccount_Click(object sender, MouseButtonEventArgs e) => _vm.OpenAzureBrowserCommand.Execute(null);
 
     private void GeneratePassword_Click(object sender, RoutedEventArgs e) =>

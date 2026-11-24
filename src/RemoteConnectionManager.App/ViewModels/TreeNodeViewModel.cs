@@ -102,10 +102,14 @@ public sealed partial class TreeNodeViewModel : ObservableObject
         OnPropertyChanged(nameof(Glyph));
     }
 
-    /// <summary>Hides nodes that do not match. Folders stay visible when any descendant matches and expand to show it.</summary>
-    public bool ApplyFilter(string filter)
+    /// <summary>
+    /// Hides nodes that do not match. Folders stay visible when any descendant matches and expand to show it.
+    /// With <paramref name="favouritesOnly"/>, only favourite entries (that also match the text) are shown.
+    /// </summary>
+    public bool ApplyFilter(string filter, bool favouritesOnly = false)
     {
-        if (string.IsNullOrWhiteSpace(filter))
+        var hasText = !string.IsNullOrWhiteSpace(filter);
+        if (!hasText && !favouritesOnly)
         {
             IsVisible = true;
             foreach (var child in Children) child.ApplyFilter(filter);
@@ -114,14 +118,15 @@ public sealed partial class TreeNodeViewModel : ObservableObject
 
         if (Entry is not null)
         {
-            IsVisible = ConnectionSearch.Matches(Entry, filter);
+            IsVisible = (!favouritesOnly || Entry.Favourite) && (!hasText || ConnectionSearch.Matches(Entry, filter));
             return IsVisible;
         }
 
         var any = false;
         foreach (var child in Children)
-            any |= child.ApplyFilter(filter);
-        var selfMatch = Folder!.Name.Contains(filter, StringComparison.OrdinalIgnoreCase);
+            any |= child.ApplyFilter(filter, favouritesOnly);
+        // A folder name match shows the whole folder, which would defeat the favourites filter.
+        var selfMatch = hasText && !favouritesOnly && Folder!.Name.Contains(filter, StringComparison.OrdinalIgnoreCase);
         if (selfMatch && !any)
             foreach (var child in Children) child.IsVisible = true;
         IsVisible = any || selfMatch;

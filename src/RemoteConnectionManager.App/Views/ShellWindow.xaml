@@ -146,12 +146,30 @@
                     <StackPanel DockPanel.Dock="Bottom" Margin="0,0,0,6">
                         <Button Style="{StaticResource IconButton}" Content="&#xE713;" ToolTip="Settings" Command="{Binding OpenSettingsCommand}" Foreground="{StaticResource Chrome.TextMuted}" />
                     </StackPanel>
-                    <ListBox x:Name="Rail" Background="Transparent" BorderThickness="0" SelectedIndex="0" ItemContainerStyle="{StaticResource RailItem}" SelectionChanged="Rail_SelectionChanged"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled" Padding="0">
-                        <ListBoxItem ToolTip="Navigation"><TextBlock Style="{StaticResource Glyph}" Text="&#xE8A4;" FontSize="16" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" /></ListBoxItem>
-                        <ListBoxItem ToolTip="Dashboard"><TextBlock Style="{StaticResource Glyph}" Text="&#xE80F;" FontSize="16" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" /></ListBoxItem>
-                        <ListBoxItem ToolTip="Favourites (filter)"><TextBlock Style="{StaticResource Glyph}" Text="&#xE734;" FontSize="16" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" /></ListBoxItem>
-                    </ListBox>
+                    <StackPanel>
+                        <Button Style="{StaticResource RailButton}" Content="&#xE8A4;" ToolTip="All entries (clears filters)" AutomationProperties.Name="All entries"
+                                Command="{Binding ShowAllEntriesCommand}" Tag="{Binding ShowingAllEntries}" />
+                        <Button Style="{StaticResource RailButton}" Content="&#xE80F;" ToolTip="Dashboard" AutomationProperties.Name="Dashboard"
+                                Command="{Binding ShowDashboardCommand}" Tag="{Binding DashboardSelected}" />
+                        <ToggleButton Style="{StaticResource RailButton}" ToolTip="Favourites only (click again to show all)" AutomationProperties.Name="Favourites only"
+                                      IsChecked="{Binding FavouritesOnly}" Tag="{Binding FavouritesOnly}">
+                            <ToggleButton.Content>
+                                <TextBlock FontSize="16" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}">
+                                    <TextBlock.Style>
+                                        <!-- Outline star when off, filled star when on -->
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource Glyph}">
+                                            <Setter Property="Text" Value="&#xE734;" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding FavouritesOnly}" Value="True">
+                                                    <Setter Property="Text" Value="&#xE735;" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </ToggleButton.Content>
+                        </ToggleButton>
+                    </StackPanel>
                 </DockPanel>
             </Border>
 
@@ -195,6 +213,17 @@
                                     MinWidth="64" Margin="8,0,0,0" VerticalAlignment="Center" ToolTip="Reload connections (F5)" />
                             <TextBlock Style="{StaticResource Glyph}" Text="&#xE895;" Foreground="{StaticResource Chrome.Accent}" Margin="0,0,8,0" VerticalAlignment="Center" />
                             <TextBlock Text="{Binding ChangesNotice}" ToolTip="{Binding ChangesNotice}" FontSize="11" TextWrapping="Wrap" VerticalAlignment="Center"
+                                       AutomationProperties.LiveSetting="Polite" />
+                        </DockPanel>
+                    </Border>
+                    <!-- Favourites filter is on: say so, with a one-click way back to everything -->
+                    <Border DockPanel.Dock="Top" Padding="10,5" BorderBrush="{StaticResource Chrome.Border}" BorderThickness="0,0,0,1"
+                            Visibility="{Binding FavouritesOnly, Converter={StaticResource BoolToVis}}">
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="Show all" Command="{Binding ShowAllEntriesCommand}" Style="{StaticResource AccentButton}"
+                                    MinWidth="64" Margin="8,0,0,0" VerticalAlignment="Center" ToolTip="Turn off the favourites filter" />
+                            <TextBlock Style="{StaticResource Glyph}" Text="&#xE735;" Foreground="{StaticResource Chrome.AccentLight}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                            <TextBlock Text="Showing favourites only" FontSize="11" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                                        AutomationProperties.LiveSetting="Polite" />
                         </DockPanel>
                     </Border>
